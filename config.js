@@ -8,4 +8,5 @@ window.FOREST_BLOG_CONFIG = {
   siteTitle: "별숲 커뮤니티",
   theme: "night",
   skin: "forest",
+  oauthProviders: ["kakao"],
 };

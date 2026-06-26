@@ -41,7 +41,7 @@
           </label>
           <label>
             프록시 API URL
-            <input id="installApiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://your-worker.workers.dev" />
+            <input id="installApiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://project-ref.supabase.co/functions/v1/forest-proxy" />
           </label>
           <label>
             관리자 토큰
@@ -143,18 +143,29 @@
           <section class="panel step-panel">
             <div class="panel-heading">
               <h2>3. 운영 전환</h2>
-              <a class="secondary-button" href="./remove-installer.ps1" download>
+              <a class="secondary-button" href="./remove-installer.js" download>
                 <i data-lucide="download"></i>
                 <span>정리 스크립트</span>
               </a>
             </div>
             <ul class="help-list">
-              <li>공개키를 숨기려면 Cloudflare Worker 프록시를 쓰고 `config.js`에는 `apiBaseUrl`만 넣어.</li>
-              <li>Supabase publishable key를 `config.js`에 넣는 직접 연결 모드는 브라우저에 키가 보이는 구조야.</li>
+              <li>DB 비밀키를 숨기려면 Supabase Edge Function 프록시를 쓰고 `config.js`에는 `apiBaseUrl`을 넣어.</li>
+              <li>카카오 로그인까지 쓰려면 Supabase URL과 publishable key도 Auth 전용으로 같이 넣어.</li>
               <li>SQL 실행 후 `공유 설정 저장`을 누르면 Supabase에 관리자 ID와 기본 설정이 들어가.</li>
-              <li>설치가 끝나면 `install.html`, `install.js`, `remove-installer.ps1`은 배포본에서 빼.</li>
-              <li>브라우저 JS는 서버 파일을 직접 삭제할 수 없어서 정리 스크립트를 제공해.</li>
+              <li>설치가 끝나면 `node remove-installer.js`를 실행해서 설치 파일을 배포본에서 빼.</li>
+              <li>브라우저 JS는 서버 파일을 직접 삭제할 수 없어서 Node 정리 스크립트를 제공해.</li>
               <li>배경은 관리자 화면이나 `config.js`의 `backgroundUrl`로 나중에 바꿀 수 있어.</li>
+            </ul>
+          </section>
+
+          <section class="panel step-panel">
+            <h2>4. 소셜 로그인</h2>
+            <ul class="help-list">
+              <li>직접 연결 모드와 프록시 모드 모두 Google, GitHub, Kakao 로그인 버튼을 쓸 수 있어.</li>
+              <li>Supabase Dashboard > Authentication > Providers에서 원하는 Provider를 켜.</li>
+              <li>카카오만 등록했다면 Kakao 버튼만 쓰면 돼.</li>
+              <li>Authentication > URL Configuration의 Redirect URLs에 배포 주소를 넣어.</li>
+              <li>로그인 후 관리자 패널에서 `내 ID 사용`과 `공유 설정 저장`을 누르면 오너가 고정돼.</li>
             </ul>
           </section>
         </section>

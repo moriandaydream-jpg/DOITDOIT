@@ -236,12 +236,9 @@
       siteTitle: els.siteTitle.value.trim() || "별숲 커뮤니티",
       theme: ["night", "dawn", "classic"].includes(els.theme.value) ? els.theme.value : "night",
       skin: els.skin.value === "classic" ? "classic" : "forest",
+      oauthProviders: ["kakao"],
     };
     if (includePrivate) settings.adminToken = els.adminToken.value.trim();
-    if (settings.apiBaseUrl) {
-      settings.supabaseUrl = "";
-      settings.supabaseKey = "";
-    }
     return settings;
   }
 

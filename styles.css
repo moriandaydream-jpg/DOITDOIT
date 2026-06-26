@@ -372,6 +372,18 @@ svg {
   gap: 8px;
 }
 
+.oauth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.oauth-grid .secondary-button {
+  min-width: 0;
+  padding: 0 10px;
+}
+
 .nav-button {
   justify-content: flex-start;
   width: 100%;
@@ -807,7 +819,8 @@ svg {
 
   .settings-grid,
   .three-col,
-  .summary-strip {
+  .summary-strip,
+  .oauth-grid {
     grid-template-columns: 1fr;
   }
 

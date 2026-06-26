@@ -14,23 +14,34 @@ Deno.serve(async (request) => {
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
     const admin = isAdmin(request, env);
+    const authUser = admin ? null : await getAuthUser(request, env);
+    const settings = await getSettings(env);
+    const owner = admin || isOwnerUser(authUser, settings);
     const clientKey = getClientKey(request);
+    const actor = {
+      admin,
+      owner,
+      userId: authUser?.id || "",
+      clientKey,
+    };
 
     if (path === "/api/settings" && request.method === "GET") {
-      const settings = await getSettings(env);
       return cors({ settings }, origin);
     }
 
     if (path === "/api/settings" && request.method === "PUT") {
-      requireAdmin(admin);
+      if (!canManageSettings(settings, authUser, admin)) {
+        return cors({ error: "오너 로그인이 필요해." }, origin, 403);
+      }
       const body = await request.json();
+      const ownerUserId = admin ? body.owner_user_id || null : authUser.id;
       const settings = await rest(env, TABLES.settings, {
         method: "POST",
         search: "on_conflict=id",
         body: {
           id: "main",
           site_title: body.site_title || "별숲 커뮤니티",
-          owner_user_id: body.owner_user_id || null,
+          owner_user_id: ownerUserId,
           default_board_slug: body.default_board_slug || "free",
           background_url: body.background_url || null,
           theme: ["night", "dawn", "classic"].includes(body.theme) ? body.theme : "night",
@@ -47,7 +58,7 @@ Deno.serve(async (request) => {
     }
 
     if (path === "/api/boards" && request.method === "POST") {
-      requireAdmin(admin);
+      requireOwner(actor);
       const board = await rest(env, TABLES.boards, {
         method: "POST",
         search: "on_conflict=slug",
@@ -59,45 +70,45 @@ Deno.serve(async (request) => {
 
     if (path === "/api/posts" && request.method === "GET") {
       const boardId = url.searchParams.get("boardId");
-      return cors({ posts: await listPosts(env, boardId, clientKey, admin) }, origin);
+      return cors({ posts: await listPosts(env, boardId, actor) }, origin);
     }
 
     if (path === "/api/posts" && request.method === "POST") {
       const body = await request.json();
       const board = await getBoard(env, body.board_id);
       if (!board) return cors({ error: "게시판이 없어." }, origin, 404);
-      if (board.write_role === "owner" && !admin) return cors({ error: "관리자 로그인이 필요해." }, origin, 403);
-      if (body.is_notice && !admin) return cors({ error: "공지글은 관리자만 가능해." }, origin, 403);
+      if (board.write_role === "owner" && !actor.owner) return cors({ error: "오너 로그인이 필요해." }, origin, 403);
+      if (body.is_notice && !actor.owner) return cors({ error: "공지글은 오너만 가능해." }, origin, 403);
 
       const rows = await rest(env, TABLES.posts, {
         method: "POST",
-        body: sanitizePost(body, clientKey, admin),
+        body: sanitizePost(body, actor),
         prefer: "return=representation",
       });
-      return cors({ post: scrubPost(rows[0], clientKey, admin) }, origin, 201);
+      return cors({ post: scrubPost(rows[0], actor) }, origin, 201);
     }
 
     const postMatch = path.match(/^\/api\/posts\/([^/]+)$/);
     if (postMatch && request.method === "PUT") {
       const post = await getPost(env, postMatch[1]);
       if (!post) return cors({ error: "글이 없어." }, origin, 404);
-      if (!admin && post.client_key !== clientKey) return cors({ error: "수정 권한이 없어." }, origin, 403);
+      if (!canEditRecord(post, actor)) return cors({ error: "수정 권한이 없어." }, origin, 403);
 
       const body = await request.json();
-      if (body.is_notice && !admin) return cors({ error: "공지글은 관리자만 가능해." }, origin, 403);
+      if (body.is_notice && !actor.owner) return cors({ error: "공지글은 오너만 가능해." }, origin, 403);
       const rows = await rest(env, TABLES.posts, {
         method: "PATCH",
         search: `id=eq.${encodeURIComponent(post.id)}`,
-        body: sanitizePostUpdate(body, admin),
+        body: sanitizePostUpdate(body, actor),
         prefer: "return=representation",
       });
-      return cors({ post: scrubPost(rows[0], clientKey, admin) }, origin);
+      return cors({ post: scrubPost(rows[0], actor) }, origin);
     }
 
     if (postMatch && request.method === "DELETE") {
       const post = await getPost(env, postMatch[1]);
       if (!post) return cors({ ok: true }, origin);
-      if (!admin && post.client_key !== clientKey) return cors({ error: "삭제 권한이 없어." }, origin, 403);
+      if (!canEditRecord(post, actor)) return cors({ error: "삭제 권한이 없어." }, origin, 403);
       await rest(env, TABLES.posts, {
         method: "DELETE",
         search: `id=eq.${encodeURIComponent(post.id)}`,
@@ -113,7 +124,7 @@ Deno.serve(async (request) => {
 
     if (path === "/api/comments" && request.method === "GET") {
       const postId = url.searchParams.get("postId");
-      return cors({ comments: await listComments(env, postId, clientKey, admin) }, origin);
+      return cors({ comments: await listComments(env, postId, actor) }, origin);
     }
 
     if (path === "/api/comments" && request.method === "POST") {
@@ -124,17 +135,17 @@ Deno.serve(async (request) => {
       if (!board?.allow_comments) return cors({ error: "댓글이 닫혀 있어." }, origin, 403);
       const rows = await rest(env, TABLES.comments, {
         method: "POST",
-        body: sanitizeComment(body, clientKey),
+        body: sanitizeComment(body, actor),
         prefer: "return=representation",
       });
-      return cors({ comment: scrubComment(rows[0], clientKey, admin) }, origin, 201);
+      return cors({ comment: scrubComment(rows[0], actor) }, origin, 201);
     }
 
     const commentMatch = path.match(/^\/api\/comments\/([^/]+)$/);
     if (commentMatch && request.method === "DELETE") {
       const comment = await getComment(env, commentMatch[1]);
       if (!comment) return cors({ ok: true }, origin);
-      if (!admin && comment.client_key !== clientKey) return cors({ error: "삭제 권한이 없어." }, origin, 403);
+      if (!canEditRecord(comment, actor)) return cors({ error: "삭제 권한이 없어." }, origin, 403);
       await rest(env, TABLES.comments, {
         method: "DELETE",
         search: `id=eq.${encodeURIComponent(comment.id)}`,
@@ -158,7 +169,6 @@ function readEnv() {
   };
   if (!env.SUPABASE_URL) throw new Error("SUPABASE_URL secret이 필요해.");
   if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEYS가 필요해.");
-  if (!env.ADMIN_TOKEN) throw new Error("ADMIN_TOKEN secret이 필요해.");
   return env;
 }
 
@@ -176,15 +186,54 @@ function normalizePath(pathname) {
 
 function isAdmin(request, env) {
   const auth = request.headers.get("authorization") || "";
-  return auth === `Bearer ${env.ADMIN_TOKEN}`;
+  return Boolean(env.ADMIN_TOKEN && auth === `Bearer ${env.ADMIN_TOKEN}`);
 }
 
-function requireAdmin(admin) {
-  if (!admin) {
-    const error = new Error("관리자 로그인이 필요해.");
+async function getAuthUser(request, env) {
+  const auth = request.headers.get("authorization") || "";
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1] || "";
+  if (!token || token === env.ADMIN_TOKEN) return null;
+
+  const response = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.error || response.statusText);
+    error.status = response.status;
+    throw error;
+  }
+  return data?.id ? data : null;
+}
+
+function isOwnerUser(authUser, settings) {
+  return Boolean(authUser?.id && settings?.owner_user_id === authUser.id);
+}
+
+function canManageSettings(settings, authUser, admin) {
+  return Boolean(admin || (authUser?.id && (!settings?.owner_user_id || settings.owner_user_id === authUser.id)));
+}
+
+function requireOwner(actor) {
+  if (!actor.owner) {
+    const error = new Error("오너 로그인이 필요해.");
     error.status = 403;
     throw error;
   }
+}
+
+function canEditRecord(record, actor) {
+  return Boolean(
+    actor.owner ||
+      (actor.userId && record.user_id === actor.userId) ||
+      (!record.user_id && record.client_key === actor.clientKey)
+  );
 }
 
 function getClientKey(request) {
@@ -212,14 +261,14 @@ async function getBoard(env, id) {
   return rows[0] || null;
 }
 
-async function listPosts(env, boardId, clientKey, admin) {
+async function listPosts(env, boardId, actor) {
   if (!boardId) return [];
   const posts = await rest(env, TABLES.posts, {
     search: `board_id=eq.${encodeURIComponent(boardId)}&select=id,board_id,user_id,client_key,title,content,author_name,category,is_notice,view_count,created_at,updated_at&order=is_notice.desc,created_at.desc`,
   });
   const counts = await commentCounts(env, posts.map((post) => post.id));
   return posts.map((post) => ({
-    ...scrubPost(post, clientKey, admin),
+    ...scrubPost(post, actor),
     comment_count: counts.get(post.id) || 0,
   }));
 }
@@ -231,12 +280,12 @@ async function getPost(env, id) {
   return rows[0] || null;
 }
 
-async function listComments(env, postId, clientKey, admin) {
+async function listComments(env, postId, actor) {
   if (!postId) return [];
   const comments = await rest(env, TABLES.comments, {
     search: `post_id=eq.${encodeURIComponent(postId)}&select=id,post_id,user_id,client_key,author_name,content,created_at,updated_at&order=created_at.asc`,
   });
-  return comments.map((comment) => scrubComment(comment, clientKey, admin));
+  return comments.map((comment) => scrubComment(comment, actor));
 }
 
 async function getComment(env, id) {
@@ -272,50 +321,50 @@ function sanitizeBoard(body) {
   };
 }
 
-function sanitizePost(body, clientKey, admin) {
+function sanitizePost(body, actor) {
   return {
     board_id: body.board_id,
-    user_id: null,
-    client_key: clientKey,
+    user_id: actor.userId || null,
+    client_key: actor.userId ? "" : actor.clientKey,
     title: String(body.title || "").trim().slice(0, 100),
     content: String(body.content || "").trim().slice(0, 8000),
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
     category: String(body.category || "일반").trim().slice(0, 20),
-    is_notice: Boolean(admin && body.is_notice),
+    is_notice: Boolean(actor.owner && body.is_notice),
   };
 }
 
-function sanitizePostUpdate(body, admin) {
+function sanitizePostUpdate(body, actor) {
   return {
     title: String(body.title || "").trim().slice(0, 100),
     content: String(body.content || "").trim().slice(0, 8000),
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
     category: String(body.category || "일반").trim().slice(0, 20),
-    is_notice: Boolean(admin && body.is_notice),
+    is_notice: Boolean(actor.owner && body.is_notice),
     updated_at: new Date().toISOString(),
   };
 }
 
-function sanitizeComment(body, clientKey) {
+function sanitizeComment(body, actor) {
   return {
     post_id: body.post_id,
-    user_id: null,
-    client_key: clientKey,
+    user_id: actor.userId || null,
+    client_key: actor.userId ? "" : actor.clientKey,
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
     content: String(body.content || "").trim().slice(0, 1200),
   };
 }
 
-function scrubPost(post, clientKey, admin) {
+function scrubPost(post, actor) {
   if (!post) return null;
   const { client_key, ...safePost } = post;
-  return { ...safePost, can_edit: Boolean(admin || client_key === clientKey) };
+  return { ...safePost, can_edit: canEditRecord(post, actor) };
 }
 
-function scrubComment(comment, clientKey, admin) {
+function scrubComment(comment, actor) {
   if (!comment) return null;
   const { client_key, ...safeComment } = comment;
-  return { ...safeComment, can_edit: Boolean(admin || client_key === clientKey) };
+  return { ...safeComment, can_edit: canEditRecord(comment, actor) };
 }
 
 async function rest(env, table, options = {}) {

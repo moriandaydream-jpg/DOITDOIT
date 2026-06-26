@@ -122,6 +122,7 @@
     user: null,
     settings: loadSettings(),
     sharedSettings: {},
+    authSession: null,
     boards: [],
     posts: [],
     commentCounts: new Map(),
@@ -143,6 +144,8 @@
     roleBadge: document.getElementById("roleBadge"),
     displayName: document.getElementById("displayName"),
     saveNameButton: document.getElementById("saveNameButton"),
+    oauthButtons: Array.from(document.querySelectorAll("[data-oauth-provider]")),
+    signOutButton: document.getElementById("signOutButton"),
     currentUserLabel: document.getElementById("currentUserLabel"),
     boardCountLabel: document.getElementById("boardCountLabel"),
     boardNav: document.getElementById("boardNav"),
@@ -214,6 +217,7 @@
   async function init() {
     hydrateSettingsForm();
     applyVisualSettings();
+    applyOauthProviderVisibility();
     bindEvents();
     renderIcons();
     await connectIfConfigured();
@@ -242,6 +246,12 @@
       persistSettings();
       updateIdentityUi();
     });
+
+    els.oauthButtons.forEach((button) => {
+      button.addEventListener("click", () => signInWithProvider(button.dataset.oauthProvider));
+    });
+
+    els.signOutButton.addEventListener("click", signOut);
 
     els.useCurrentUserButton.addEventListener("click", () => {
       if (!state.user?.id) {
@@ -303,6 +313,49 @@
     return Boolean(state.settings.apiBaseUrl);
   }
 
+  async function signInWithProvider(provider) {
+    if (!state.supabase) {
+      setNotice("먼저 Supabase URL과 publishable/anon key를 저장해줘. 프록시 모드에서는 이 값이 Auth 로그인 전용으로만 쓰여.");
+      return;
+    }
+
+    const { error } = await state.supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: getRedirectUrl(),
+      },
+    });
+    if (error) setNotice(readableError(error));
+  }
+
+  async function signOut() {
+    if (useProxy() && !state.supabase) {
+      state.settings.adminToken = "";
+      els.adminToken.value = "";
+      persistSettings();
+      updateIdentityUi();
+      renderBoardHeader();
+      setNotice("관리자 토큰을 지웠어.");
+      return;
+    }
+    if (!state.supabase) return;
+    const { error } = await state.supabase.auth.signOut();
+    if (error) {
+      setNotice(readableError(error));
+      return;
+    }
+    state.user = null;
+    state.authSession = null;
+    await connectIfConfigured();
+    await loadBoards();
+    selectInitialBoard();
+    await loadPosts();
+  }
+
+  function getRedirectUrl() {
+    return window.location.href.split("#")[0].split("?")[0];
+  }
+
   async function apiFetch(path, options = {}) {
     const baseUrl = state.settings.apiBaseUrl.replace(/\/+$/, "");
     const headers = {
@@ -310,7 +363,9 @@
       "x-forest-client-id": localUserId,
       ...(options.headers || {}),
     };
-    if (state.settings.adminToken) {
+    if (state.authSession?.access_token) {
+      headers.authorization = `Bearer ${state.authSession.access_token}`;
+    } else if (state.settings.adminToken) {
       headers.authorization = `Bearer ${state.settings.adminToken}`;
     }
 
@@ -329,9 +384,27 @@
 
   async function connectIfConfigured(forceNotice) {
     if (useProxy()) {
-      state.supabase = null;
+      const { supabaseUrl, supabaseKey } = state.settings;
+      state.supabase = supabaseUrl && supabaseKey && window.supabase?.createClient
+        ? window.supabase.createClient(supabaseUrl, supabaseKey)
+        : null;
       state.user = null;
-      setStatus("프록시 연결", "connected");
+      state.authSession = null;
+      if (state.supabase) {
+        const { data: sessionData } = await state.supabase.auth.getSession();
+        state.authSession = sessionData.session || null;
+        if (state.authSession) {
+          const { data: userData } = await state.supabase.auth.getUser();
+          state.user = userData.user || null;
+        }
+        state.supabase.auth.onAuthStateChange((_event, session) => {
+          state.authSession = session || null;
+          state.user = session?.user || null;
+          updateIdentityUi();
+          renderBoardHeader();
+        });
+      }
+      setStatus(state.user ? "프록시 로그인" : "프록시 연결", "connected");
       updateIdentityUi();
       try {
         await loadSharedSettings();
@@ -463,6 +536,8 @@
             skin: state.settings.skin,
           },
         });
+        await loadSharedSettings();
+        updateIdentityUi();
         setNotice("프록시 공유 설정 저장했어.");
       } catch (error) {
         setNotice(readableError(error));
@@ -1137,6 +1212,7 @@
       supabaseUrl: els.supabaseUrl.value,
       supabaseKey: els.supabaseKey.value,
       ownerUserId: els.ownerUserId.value,
+      oauthProviders: state.settings.oauthProviders,
       displayName: els.displayName.value,
       siteTitle: els.siteTitleInput.value,
       defaultBoardSlug: els.defaultBoardSelect.value || activeBoard()?.slug,
@@ -1155,15 +1231,37 @@
     document.title = settings.siteTitle || "별숲 커뮤니티";
   }
 
+  function applyOauthProviderVisibility() {
+    const enabled = new Set(state.settings.oauthProviders);
+    els.oauthButtons.forEach((button) => {
+      button.hidden = !enabled.has(button.dataset.oauthProvider);
+    });
+  }
+
   function updateIdentityUi() {
     const owner = isOwner();
     els.roleBadge.textContent = owner ? "owner" : "guest";
     els.roleBadge.classList.toggle("connected", owner);
-    els.currentUserLabel.textContent = useProxy()
-      ? `Proxy guest ${localUserId}`
-      : state.user?.id
-        ? `User ID ${state.user.id}`
-        : `Local ID ${localUserId}`;
+    if (useProxy()) {
+      if (state.user?.id) {
+        const email = state.user.email || state.user.user_metadata?.email || "";
+        const name = state.user.user_metadata?.name || state.user.user_metadata?.full_name || "";
+        els.currentUserLabel.textContent = `프록시 로그인 ${email || name || state.user.id} · User ID ${state.user.id}`;
+        return;
+      }
+      els.currentUserLabel.textContent = state.settings.adminToken
+        ? "프록시 관리자 토큰 로그인"
+        : `Proxy guest ${localUserId}`;
+      return;
+    }
+    if (state.user?.id) {
+      const email = state.user.email || state.user.user_metadata?.email || "";
+      const name = state.user.user_metadata?.name || state.user.user_metadata?.full_name || "";
+      const mode = state.user.is_anonymous ? "익명" : "로그인";
+      els.currentUserLabel.textContent = `${mode} ${email || name || state.user.id} · User ID ${state.user.id}`;
+      return;
+    }
+    els.currentUserLabel.textContent = `Local ID ${localUserId}`;
   }
 
   function setLoading(isLoading) {
@@ -1218,7 +1316,12 @@
   }
 
   function isOwner() {
-    if (useProxy()) return Boolean(state.settings.adminToken);
+    if (useProxy()) {
+      return Boolean(
+        state.settings.adminToken ||
+          (state.settings.ownerUserId && state.user?.id === state.settings.ownerUserId)
+      );
+    }
     if (!state.supabase) return true;
     return Boolean(state.settings.ownerUserId && state.user?.id === state.settings.ownerUserId);
   }
@@ -1255,7 +1358,17 @@
       siteTitle: sanitizeText(value.siteTitle || "별숲 커뮤니티", 32),
       theme: ["night", "dawn", "classic"].includes(value.theme) ? value.theme : "night",
       skin: value.skin === "classic" ? "classic" : "forest",
+      oauthProviders: normalizeOauthProviders(value.oauthProviders),
     };
+  }
+
+  function normalizeOauthProviders(value) {
+    const allowed = new Set(["google", "github", "kakao"]);
+    const providers = Array.isArray(value) ? value : ["google", "github", "kakao"];
+    const normalized = providers
+      .map((provider) => String(provider || "").trim().toLowerCase())
+      .filter((provider) => allowed.has(provider));
+    return Array.from(new Set(normalized.length ? normalized : ["kakao"]));
   }
 
   function loadLocalBoards() {
