@@ -1,5 +1,6 @@
 window.FOREST_BLOG_CONFIG = {
   apiBaseUrl: "",
+  oauthRedirectUrl: "",
   supabaseUrl: "",
   supabaseKey: "",
   ownerUserId: "",

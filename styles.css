@@ -362,6 +362,20 @@ svg {
   color: #c8ffdf;
 }
 
+.role-badge.role-owner,
+.author-role.author-owner {
+  border-color: rgba(239, 197, 110, 0.62);
+  background: rgba(239, 197, 110, 0.14);
+  color: #ffe4a5;
+}
+
+.role-badge.role-guest,
+.author-role.author-guest {
+  border-color: rgba(139, 214, 162, 0.38);
+  background: rgba(139, 214, 162, 0.1);
+  color: #c8ffdf;
+}
+
 .status-pill.error {
   border-color: rgba(255, 140, 126, 0.58);
   color: #ffd5cf;
@@ -382,6 +396,13 @@ svg {
 .oauth-grid .secondary-button {
   min-width: 0;
   padding: 0 10px;
+}
+
+.kakao-login-button {
+  grid-column: 1 / -1;
+  border-color: rgba(254, 229, 0, 0.52);
+  background: rgba(254, 229, 0, 0.16);
+  color: #fff8bd;
 }
 
 .nav-button {
@@ -407,6 +428,40 @@ svg {
   height: 1px;
   margin: 16px 0;
   background: var(--line);
+}
+
+.admin-kicker {
+  margin: 0 0 4px;
+  color: var(--gold);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.admin-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.admin-mode .cms-layout {
+  display: block;
+}
+
+body.admin-mode .left-rail {
+  position: static;
+}
+
+body.admin-mode .user-panel,
+body.admin-mode .board-menu,
+body.admin-mode .content-panel {
+  display: none;
+}
+
+body.admin-mode .admin-panel {
+  display: block;
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 24px;
 }
 
 .admin-board-list {
@@ -622,6 +677,39 @@ svg {
   font-weight: 900;
 }
 
+.author-line,
+.author-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.dialog-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .empty-state {
   padding: 34px;
   border: 1px dashed var(--line);
@@ -827,5 +915,9 @@ svg {
   .dialog-actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  body.admin-mode .admin-panel {
+    padding: 16px;
   }
 }

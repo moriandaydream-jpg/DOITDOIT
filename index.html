@@ -27,9 +27,9 @@
             <i data-lucide="refresh-cw"></i>
             <span>새로고침</span>
           </button>
-          <button id="adminToggleButton" class="icon-button" type="button" title="관리">
+          <button id="adminToggleButton" class="icon-button" type="button" title="관리 페이지" hidden>
             <i data-lucide="settings"></i>
-            <span>관리</span>
+            <span id="adminToggleLabel">관리</span>
           </button>
         </div>
       </header>
@@ -38,8 +38,8 @@
         <aside class="left-rail">
           <section class="panel user-panel">
             <div class="panel-heading">
-              <h2>방문자</h2>
-              <span id="roleBadge" class="small-muted">guest</span>
+              <h2>내 정보</h2>
+              <span id="roleBadge" class="small-muted role-badge role-guest">손님</span>
             </div>
             <label>
               표시 이름
@@ -50,17 +50,9 @@
               <span>이름 저장</span>
             </button>
             <div class="oauth-grid">
-              <button class="secondary-button" type="button" data-oauth-provider="google">
-                <i data-lucide="mail"></i>
-                <span>Google</span>
-              </button>
-              <button class="secondary-button" type="button" data-oauth-provider="github">
-                <i data-lucide="github"></i>
-                <span>GitHub</span>
-              </button>
-              <button class="secondary-button" type="button" data-oauth-provider="kakao">
-                <i data-lucide="message-circle"></i>
-                <span>Kakao</span>
+              <button class="secondary-button kakao-login-button" type="button" data-oauth-provider="kakao">
+                <i data-lucide="shield-check"></i>
+                <span>카카오 관리자 로그인</span>
               </button>
               <button id="signOutButton" class="secondary-button" type="button">
                 <i data-lucide="log-out"></i>
@@ -80,10 +72,16 @@
 
           <section id="adminPanel" class="panel admin-panel" hidden>
             <div class="panel-heading">
-              <h2>관리자</h2>
-              <button id="closeAdminButton" class="ghost-icon" type="button" title="닫기">
-                <i data-lucide="x"></i>
-              </button>
+              <div>
+                <p class="admin-kicker">ADMINISTRATION</p>
+                <h2>관리 페이지</h2>
+              </div>
+              <div class="admin-heading-actions">
+                <span class="small-muted role-badge role-owner">관리자 전용</span>
+                <button id="closeAdminButton" class="ghost-icon" type="button" title="닫기">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
             </div>
 
             <label>
@@ -97,6 +95,10 @@
             <label>
               프록시 API URL
               <input id="apiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://your-worker.workers.dev" />
+            </label>
+            <label>
+              로그인 후 돌아올 주소
+              <input id="oauthRedirectUrl" autocomplete="off" spellcheck="false" placeholder="https://계정.github.io/저장소/" />
             </label>
             <label>
               관리자 토큰

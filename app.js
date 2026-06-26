@@ -139,6 +139,7 @@
     connectionBadge: document.getElementById("connectionBadge"),
     refreshButton: document.getElementById("refreshButton"),
     adminToggleButton: document.getElementById("adminToggleButton"),
+    adminToggleLabel: document.getElementById("adminToggleLabel"),
     adminPanel: document.getElementById("adminPanel"),
     closeAdminButton: document.getElementById("closeAdminButton"),
     roleBadge: document.getElementById("roleBadge"),
@@ -152,6 +153,7 @@
     supabaseUrl: document.getElementById("supabaseUrl"),
     supabaseKey: document.getElementById("supabaseKey"),
     apiBaseUrl: document.getElementById("apiBaseUrl"),
+    oauthRedirectUrl: document.getElementById("oauthRedirectUrl"),
     adminToken: document.getElementById("adminToken"),
     ownerUserId: document.getElementById("ownerUserId"),
     useCurrentUserButton: document.getElementById("useCurrentUserButton"),
@@ -233,12 +235,11 @@
     });
 
     els.adminToggleButton.addEventListener("click", () => {
-      els.adminPanel.hidden = !els.adminPanel.hidden;
-      if (!els.adminPanel.hidden) els.supabaseUrl.focus();
+      setAdminMode(!document.body.classList.contains("admin-mode"));
     });
 
     els.closeAdminButton.addEventListener("click", () => {
-      els.adminPanel.hidden = true;
+      setAdminMode(false);
     });
 
     els.saveNameButton.addEventListener("click", () => {
@@ -319,13 +320,17 @@
       return;
     }
 
-    const { error } = await state.supabase.auth.signInWithOAuth({
+    const { data, error } = await state.supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: getRedirectUrl(),
       },
     });
-    if (error) setNotice(readableError(error));
+    if (error) {
+      setNotice(readableError(error));
+      return;
+    }
+    if (data?.url) window.location.assign(data.url);
   }
 
   async function signOut() {
@@ -353,7 +358,20 @@
   }
 
   function getRedirectUrl() {
-    return window.location.href.split("#")[0].split("?")[0];
+    const configured = state.settings.oauthRedirectUrl;
+    if (configured) {
+      try {
+        return new URL(configured, window.location.href).href;
+      } catch {
+        setNotice("로그인 후 돌아올 주소가 올바른 URL이 아니야.");
+      }
+    }
+
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    if (url.pathname.endsWith("/index.html")) url.pathname = url.pathname.slice(0, -"index.html".length);
+    return url.href;
   }
 
   async function apiFetch(path, options = {}) {
@@ -404,10 +422,11 @@
           renderBoardHeader();
         });
       }
-      setStatus(state.user ? "프록시 로그인" : "프록시 연결", "connected");
-      updateIdentityUi();
       try {
         await loadSharedSettings();
+        await enforceOwnerOnlyLogin();
+        setStatus(isOwner() ? "관리자 로그인" : "프록시 연결", "connected");
+        updateIdentityUi();
         if (forceNotice) setNotice("프록시 설정 저장했어.");
       } catch (error) {
         setStatus("프록시 실패", "error");
@@ -444,7 +463,8 @@
       if (error) throw error;
       state.user = data.user;
       await loadSharedSettings();
-      setStatus("Supabase 연결", "connected");
+      await enforceOwnerOnlyLogin();
+      setStatus(isOwner() ? "관리자 로그인" : "Supabase 연결", "connected");
       updateIdentityUi();
       if (forceNotice) setNotice("연결 설정 저장했어.");
       subscribeRealtime();
@@ -815,7 +835,7 @@
               </button>
             </td>
             <td>${escapeHtml(post.category)}</td>
-            <td>${escapeHtml(post.author_name)}</td>
+            <td>${renderAuthor(post)}</td>
             <td>${formatDate(post.created_at)}</td>
             <td>${post.view_count || 0}</td>
           </tr>
@@ -859,7 +879,7 @@
         <h3>${escapeHtml(post.title)}</h3>
         <p>${escapeHtml(post.content)}</p>
         <div class="post-meta">
-          <span>${escapeHtml(post.author_name)} · ${formatDate(post.created_at)}</span>
+          <span class="author-meta">${renderAuthor(post)}<span>· ${formatDate(post.created_at)}</span></span>
           <span>조회 ${post.view_count || 0} · 댓글 ${comments}</span>
         </div>
       `;
@@ -874,9 +894,9 @@
     state.selectedPost = post;
     els.dialogCategory.textContent = post.category || "일반";
     els.dialogTitle.textContent = post.title;
-    els.dialogMeta.textContent = `${post.author_name || "익명"} · ${formatDate(post.created_at)} · 조회 ${post.view_count || 0}${
-      post.updated_at ? " · 수정됨" : ""
-    }`;
+    els.dialogMeta.innerHTML = `${renderAuthor(post)}<span>· ${formatDate(post.created_at)} · 조회 ${
+      post.view_count || 0
+    }${post.updated_at ? " · 수정됨" : ""}</span>`;
     els.dialogContent.textContent = post.content;
     els.editPostButton.hidden = !canEditPost(post);
     els.deletePostButton.hidden = !canEditPost(post);
@@ -942,7 +962,7 @@
       const canDelete = canEditComment(comment);
       item.innerHTML = `
         <div class="comment-meta">
-          <span>${escapeHtml(comment.author_name)} · ${formatDate(comment.created_at)}</span>
+          <span class="author-meta">${renderAuthor(comment)}<span>· ${formatDate(comment.created_at)}</span></span>
           ${canDelete ? `<button class="ghost-icon" type="button" data-comment-id="${comment.id}" title="댓글 삭제"><i data-lucide="trash-2"></i></button>` : ""}
         </div>
         <p>${escapeHtml(comment.content)}</p>
@@ -1196,6 +1216,7 @@
     els.supabaseUrl.value = state.settings.supabaseUrl;
     els.supabaseKey.value = state.settings.supabaseKey;
     els.apiBaseUrl.value = state.settings.apiBaseUrl;
+    els.oauthRedirectUrl.value = state.settings.oauthRedirectUrl || getDefaultRedirectUrl();
     els.adminToken.value = state.settings.adminToken;
     els.ownerUserId.value = state.settings.ownerUserId;
     els.displayName.value = state.settings.displayName || createGuestName();
@@ -1208,6 +1229,7 @@
   function readSettingsForm() {
     return normalizeSettings({
       apiBaseUrl: els.apiBaseUrl.value,
+      oauthRedirectUrl: els.oauthRedirectUrl.value,
       adminToken: els.adminToken.value,
       supabaseUrl: els.supabaseUrl.value,
       supabaseKey: els.supabaseKey.value,
@@ -1233,35 +1255,89 @@
 
   function applyOauthProviderVisibility() {
     const enabled = new Set(state.settings.oauthProviders);
+    const signedIn = Boolean(state.user?.id && !state.user.is_anonymous);
     els.oauthButtons.forEach((button) => {
-      button.hidden = !enabled.has(button.dataset.oauthProvider);
+      button.hidden = signedIn || !enabled.has(button.dataset.oauthProvider);
     });
   }
 
   function updateIdentityUi() {
     const owner = isOwner();
-    els.roleBadge.textContent = owner ? "owner" : "guest";
-    els.roleBadge.classList.toggle("connected", owner);
+    els.roleBadge.textContent = owner ? "관리자" : "손님";
+    els.roleBadge.classList.toggle("role-owner", owner);
+    els.roleBadge.classList.toggle("role-guest", !owner);
+    els.adminToggleButton.hidden = !owner;
+    if (!owner && document.body.classList.contains("admin-mode")) setAdminMode(false);
+    applyOauthProviderVisibility();
+    els.signOutButton.hidden = (!state.user?.id || state.user.is_anonymous) && !state.settings.adminToken;
     if (useProxy()) {
       if (state.user?.id) {
         const email = state.user.email || state.user.user_metadata?.email || "";
         const name = state.user.user_metadata?.name || state.user.user_metadata?.full_name || "";
-        els.currentUserLabel.textContent = `프록시 로그인 ${email || name || state.user.id} · User ID ${state.user.id}`;
+        els.currentUserLabel.textContent = `${owner ? "관리자" : "손님"} 로그인 · ${email || name || state.user.id}`;
         return;
       }
       els.currentUserLabel.textContent = state.settings.adminToken
-        ? "프록시 관리자 토큰 로그인"
-        : `Proxy guest ${localUserId}`;
+        ? "관리자 토큰으로 로그인됨"
+        : "손님 · 로그인하지 않음";
       return;
     }
     if (state.user?.id) {
       const email = state.user.email || state.user.user_metadata?.email || "";
       const name = state.user.user_metadata?.name || state.user.user_metadata?.full_name || "";
-      const mode = state.user.is_anonymous ? "익명" : "로그인";
-      els.currentUserLabel.textContent = `${mode} ${email || name || state.user.id} · User ID ${state.user.id}`;
+      els.currentUserLabel.textContent = state.user.is_anonymous
+        ? "손님 · 익명 방문"
+        : `${owner ? "관리자" : "손님"} 로그인 · ${email || name || state.user.id}`;
       return;
     }
-    els.currentUserLabel.textContent = `Local ID ${localUserId}`;
+    els.currentUserLabel.textContent = state.supabase ? "손님 · 로그인하지 않음" : "로컬 관리자 모드";
+  }
+
+  async function enforceOwnerOnlyLogin() {
+    if (!state.supabase || !state.user?.id || state.user.is_anonymous) return;
+    const ownerUserId = state.sharedSettings.ownerUserId || state.settings.ownerUserId;
+    if (!ownerUserId || state.user.id === ownerUserId) return;
+
+    const rejectedUserId = state.user.id;
+    await state.supabase.auth.signOut();
+    state.user = null;
+    state.authSession = null;
+
+    if (!useProxy()) {
+      const { error: anonymousError } = await state.supabase.auth.signInAnonymously();
+      if (anonymousError) throw anonymousError;
+      const { data, error: userError } = await state.supabase.auth.getUser();
+      if (userError) throw userError;
+      state.user = data.user;
+    }
+    setNotice(`관리자 계정이 아니라서 손님 상태로 돌아왔어. 로그인한 User ID: ${rejectedUserId}`);
+  }
+
+  function getDefaultRedirectUrl() {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    if (url.pathname.endsWith("/index.html") || url.pathname.endsWith("/install.html")) {
+      url.pathname = url.pathname.replace(/(?:index|install)\.html$/, "");
+    }
+    return url.href;
+  }
+
+  function setAdminMode(enabled) {
+    if (enabled && !isOwner()) {
+      setNotice("관리자만 관리 페이지에 들어갈 수 있어.");
+      return;
+    }
+    document.body.classList.toggle("admin-mode", enabled);
+    els.adminPanel.hidden = !enabled;
+    els.adminToggleButton.setAttribute("aria-pressed", String(enabled));
+    els.adminToggleButton.title = enabled ? "게시판으로 돌아가기" : "관리 페이지";
+    els.adminToggleLabel.textContent = enabled ? "게시판" : "관리";
+    els.adminToggleButton
+      .querySelector("[data-lucide]")
+      ?.setAttribute("data-lucide", enabled ? "layout-list" : "settings");
+    if (enabled) hydrateSettingsForm();
+    renderIcons();
   }
 
   function setLoading(isLoading) {
@@ -1326,6 +1402,23 @@
     return Boolean(state.settings.ownerUserId && state.user?.id === state.settings.ownerUserId);
   }
 
+  function isOwnerRecord(record) {
+    if (!record) return false;
+    if (!state.supabase && !useProxy()) {
+      return record.user_id === localUserId || record.user_id === "sample-owner";
+    }
+    const ownerUserId = state.sharedSettings.ownerUserId || state.settings.ownerUserId;
+    return Boolean(ownerUserId && record.user_id === ownerUserId);
+  }
+
+  function renderAuthor(record) {
+    const owner = isOwnerRecord(record);
+    const name = escapeHtml(record?.author_name || "익명");
+    return `<span class="author-line"><span class="author-name">${name}</span><span class="author-role ${
+      owner ? "author-owner" : "author-guest"
+    }">${owner ? "관리자" : "손님"}</span></span>`;
+  }
+
   function loadSettings() {
     return normalizeSettings({
       ...runtimeConfig,
@@ -1348,6 +1441,7 @@
   function normalizeSettings(value) {
     return {
       apiBaseUrl: String(value.apiBaseUrl || "").trim(),
+      oauthRedirectUrl: String(value.oauthRedirectUrl || "").trim(),
       adminToken: String(value.adminToken || "").trim(),
       supabaseUrl: String(value.supabaseUrl || "").trim(),
       supabaseKey: String(value.supabaseKey || "").trim(),
@@ -1363,8 +1457,8 @@
   }
 
   function normalizeOauthProviders(value) {
-    const allowed = new Set(["google", "github", "kakao"]);
-    const providers = Array.isArray(value) ? value : ["google", "github", "kakao"];
+    const allowed = new Set(["kakao"]);
+    const providers = Array.isArray(value) ? value : ["kakao"];
     const normalized = providers
       .map((provider) => String(provider || "").trim().toLowerCase())
       .filter((provider) => allowed.has(provider));

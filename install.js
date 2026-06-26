@@ -8,6 +8,7 @@
     supabaseUrl: document.getElementById("installSupabaseUrl"),
     supabaseKey: document.getElementById("installSupabaseKey"),
     apiBaseUrl: document.getElementById("installApiBaseUrl"),
+    oauthRedirectUrl: document.getElementById("installOauthRedirectUrl"),
     adminToken: document.getElementById("installAdminToken"),
     ownerUserId: document.getElementById("installOwnerUserId"),
     siteTitle: document.getElementById("installSiteTitle"),
@@ -36,6 +37,7 @@
     els.supabaseUrl.value = settings.supabaseUrl || "";
     els.supabaseKey.value = settings.supabaseKey || "";
     els.apiBaseUrl.value = settings.apiBaseUrl || "";
+    els.oauthRedirectUrl.value = settings.oauthRedirectUrl || getDefaultRedirectUrl();
     els.adminToken.value = "";
     els.ownerUserId.value = settings.ownerUserId || "";
     els.siteTitle.value = settings.siteTitle || "별숲 커뮤니티";
@@ -61,6 +63,7 @@
       els.supabaseUrl,
       els.supabaseKey,
       els.apiBaseUrl,
+      els.oauthRedirectUrl,
       els.adminToken,
       els.ownerUserId,
       els.siteTitle,
@@ -228,6 +231,7 @@
   function readSettings(includePrivate) {
     const settings = {
       apiBaseUrl: els.apiBaseUrl.value.trim(),
+      oauthRedirectUrl: els.oauthRedirectUrl.value.trim() || getDefaultRedirectUrl(),
       supabaseUrl: els.supabaseUrl.value.trim(),
       supabaseKey: els.supabaseKey.value.trim(),
       ownerUserId: els.ownerUserId.value.trim(),
@@ -248,6 +252,14 @@
     } catch {
       return {};
     }
+  }
+
+  function getDefaultRedirectUrl() {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/(?:index|install)\.html$/, "");
+    return url.href;
   }
 
   async function copyText(value, message) {

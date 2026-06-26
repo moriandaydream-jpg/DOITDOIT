@@ -44,6 +44,10 @@
             <input id="installApiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://project-ref.supabase.co/functions/v1/forest-proxy" />
           </label>
           <label>
+            로그인 후 돌아올 주소
+            <input id="installOauthRedirectUrl" autocomplete="off" spellcheck="false" placeholder="https://계정.github.io/저장소/" />
+          </label>
+          <label>
             관리자 토큰
             <input id="installAdminToken" autocomplete="off" spellcheck="false" type="password" placeholder="프록시 저장용, config에는 안 들어감" />
           </label>
@@ -161,10 +165,11 @@
           <section class="panel step-panel">
             <h2>4. 소셜 로그인</h2>
             <ul class="help-list">
-              <li>직접 연결 모드와 프록시 모드 모두 Google, GitHub, Kakao 로그인 버튼을 쓸 수 있어.</li>
-              <li>Supabase Dashboard > Authentication > Providers에서 원하는 Provider를 켜.</li>
-              <li>카카오만 등록했다면 Kakao 버튼만 쓰면 돼.</li>
-              <li>Authentication > URL Configuration의 Redirect URLs에 배포 주소를 넣어.</li>
+              <li>직접 연결 모드와 프록시 모드 모두 카카오 로그인을 쓸 수 있어.</li>
+              <li>Supabase Dashboard > Authentication > Providers에서 Kakao Provider를 켜.</li>
+              <li>Supabase URL Configuration의 Site URL과 Redirect URLs에 위 `로그인 후 돌아올 주소`를 똑같이 넣어.</li>
+              <li>Kakao Developers의 Redirect URI에는 사이트 주소가 아니라 Supabase의 `https://프로젝트.supabase.co/auth/v1/callback`을 넣어.</li>
+              <li>카카오 로그인은 관리자 전용이며, 관리자 User ID와 다른 계정은 손님으로 돌아가.</li>
               <li>로그인 후 관리자 패널에서 `내 ID 사용`과 `공유 설정 저장`을 누르면 오너가 고정돼.</li>
             </ul>
           </section>

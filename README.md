@@ -15,7 +15,7 @@ GitHub Pages 같은 정적 호스팅에 올릴 수 있는 Supabase 기반 게시
 - 설치 페이지: SQL 복사, Supabase 연결 테스트, 관리자 User ID 확인, `config.js` 생성
 - 설치 후 제거 스크립트: `install.html`, `install.js`, `remove-installer.js`, `remove-installer.ps1` 삭제
 - 프록시 모드: `apiBaseUrl`로 DB 접근을 Edge Function에 맡겨 service-role key를 숨깁니다.
-- 소셜 로그인: Google, GitHub, Kakao 버튼을 쓸 수 있고, 프록시 모드에서는 Supabase Auth 토큰을 Edge Function이 검증합니다.
+- 관리자 로그인: 카카오 계정의 User ID가 관리자 ID와 일치할 때만 로그인 상태를 유지합니다.
 
 ## 설치 순서
 
@@ -34,17 +34,21 @@ GitHub Pages 같은 정적 호스팅에 올릴 수 있는 Supabase 기반 게시
 
 ## 소셜 로그인 설정
 
-Google/GitHub/Kakao 로그인을 쓰려면 Supabase Dashboard에서 해당 Provider를 켜야 합니다. 카카오만 등록했다면 Kakao 버튼만 쓰면 됩니다.
+카카오 로그인을 쓰려면 Supabase Dashboard에서 Kakao Provider를 켜야 합니다.
 
 1. Supabase Dashboard > Authentication > Providers로 갑니다.
-2. Google, GitHub, Kakao 중 쓸 Provider를 켭니다.
-3. 각 Provider의 Client ID / Secret을 입력합니다.
-4. Authentication > URL Configuration에서 Site URL과 Redirect URLs에 실제 배포 주소를 넣습니다.
-5. 사이트에서 소셜 로그인 후 관리자 패널의 `내 ID 사용`을 누르고 `공유 설정 저장`을 누릅니다.
+2. Kakao Provider를 켭니다.
+3. Kakao Client ID / Secret을 입력합니다.
+4. `config.js`의 `oauthRedirectUrl`에 실제 배포 주소를 넣습니다. GitHub Pages라면 `https://계정.github.io/저장소/`처럼 마지막 `/`까지 포함합니다.
+5. Authentication > URL Configuration에서 Site URL과 Redirect URLs에 같은 주소를 정확히 넣습니다.
+6. Kakao Developers의 Redirect URI에는 Supabase Dashboard에 표시된 `https://<project-ref>.supabase.co/auth/v1/callback`을 넣습니다.
+7. 사이트에서 카카오 로그인 후 관리자 페이지의 `내 ID 사용`을 누르고 `공유 설정 저장`을 누릅니다.
 
 이후 `owner_user_id`가 소셜 로그인 계정의 User ID로 고정돼서, 익명 로그인처럼 도메인마다 ID가 달라지는 문제가 줄어듭니다.
 
-`config.js`의 `oauthProviders`가 `["kakao"]`이면 카카오 버튼만 보입니다. 나중에 다른 Provider를 켜면 `["kakao", "google", "github"]`처럼 늘리면 됩니다.
+`config.js`의 `oauthProviders`는 `["kakao"]`만 사용합니다.
+
+카카오 로그인은 관리자 전용입니다. 이미 `owner_user_id`가 지정된 상태에서 다른 카카오 계정으로 로그인하면 세션을 종료하고 손님 상태로 되돌립니다.
 
 ### 프록시 + 카카오 로그인 모드
 
