@@ -35,7 +35,7 @@ Deno.serve(async (request) => {
       }
       const body = await request.json();
       const ownerUserId = admin ? body.owner_user_id || null : authUser.id;
-      const settings = await rest(env, TABLES.settings, {
+      const savedSettings = await rest(env, TABLES.settings, {
         method: "POST",
         search: "on_conflict=id",
         body: {
@@ -50,7 +50,7 @@ Deno.serve(async (request) => {
         },
         prefer: "resolution=merge-duplicates,return=representation",
       });
-      return cors({ settings: settings[0] || null }, origin);
+      return cors({ settings: savedSettings[0] || null }, origin);
     }
 
     if (path === "/api/boards" && request.method === "GET") {

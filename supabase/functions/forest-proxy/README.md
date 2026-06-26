@@ -30,3 +30,13 @@ verify_jwt = false
 ```
 
 함수 호출 자체는 공개하되, 쓰기 권한은 함수 내부에서 Supabase Auth JWT 또는 `ADMIN_TOKEN`으로 확인합니다.
+
+## 배포 명령
+
+프로젝트 루트에서 아래처럼 배포합니다. `인증 헤더 누락` 오류가 나오면 기존 함수의 JWT 검사가 켜진 것이므로 같은 명령으로 다시 배포합니다.
+
+```bash
+supabase functions deploy forest-proxy --no-verify-jwt --project-ref YOUR_PROJECT_REF
+```
+
+`config.toml`을 포함한 프로젝트 루트에서 `supabase functions deploy forest-proxy`를 실행해도 `verify_jwt = false`가 적용됩니다. GitHub Pages에 함수 파일만 업로드하는 것으로는 Edge Function이 갱신되지 않습니다.
