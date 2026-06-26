@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>별숲 설치</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="./config.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="site-header">
+        <div class="brand-block">
+          <p class="eyebrow">Install</p>
+          <h1>별숲 설치</h1>
+        </div>
+        <div class="top-actions">
+          <span id="installStatus" class="status-pill">대기</span>
+          <a class="icon-button" href="./index.html" title="앱 열기">
+            <i data-lucide="external-link"></i>
+            <span>앱 열기</span>
+          </a>
+        </div>
+      </header>
+
+      <main class="install-layout">
+        <aside class="panel">
+          <div class="panel-heading">
+            <h2>기본 설정</h2>
+          </div>
+          <label>
+            Supabase 프로젝트 URL
+            <input id="installSupabaseUrl" autocomplete="off" spellcheck="false" placeholder="https://xxxx.supabase.co" />
+          </label>
+          <label>
+            Publishable / anon key
+            <input id="installSupabaseKey" autocomplete="off" spellcheck="false" placeholder="sb_publishable_..." />
+          </label>
+          <label>
+            프록시 API URL
+            <input id="installApiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://your-worker.workers.dev" />
+          </label>
+          <label>
+            관리자 토큰
+            <input id="installAdminToken" autocomplete="off" spellcheck="false" type="password" placeholder="프록시 저장용, config에는 안 들어감" />
+          </label>
+          <label>
+            관리자 User ID
+            <input id="installOwnerUserId" autocomplete="off" spellcheck="false" placeholder="연결 테스트 후 자동 입력" />
+          </label>
+          <div class="settings-grid">
+            <label>
+              사이트 제목
+              <input id="installSiteTitle" maxlength="32" placeholder="별숲 커뮤니티" />
+            </label>
+            <label>
+              기본 게시판
+              <select id="installDefaultBoardSlug">
+                <option value="free">자유게시판</option>
+                <option value="notice">공지사항</option>
+                <option value="qna">질문답변</option>
+                <option value="blog">블로그</option>
+              </select>
+            </label>
+          </div>
+          <div class="settings-grid">
+            <label>
+              테마
+              <select id="installTheme">
+                <option value="night">별숲</option>
+                <option value="dawn">새벽</option>
+                <option value="classic">클래식</option>
+              </select>
+            </label>
+            <label>
+              스킨
+              <select id="installSkin">
+                <option value="forest">숲</option>
+                <option value="classic">그누 느낌</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            배경 이미지 URL
+            <input id="installBackgroundUrl" autocomplete="off" spellcheck="false" placeholder="./assets/shooting-star-forest.png" />
+          </label>
+          <div class="button-row">
+            <button id="testConnectionButton" class="primary-button" type="button">
+              <i data-lucide="plug-zap"></i>
+              <span>연결 테스트</span>
+            </button>
+            <button id="saveSharedButton" class="secondary-button" type="button">
+              <i data-lucide="cloud-upload"></i>
+              <span>공유 설정 저장</span>
+            </button>
+            <button id="applyLocalButton" class="secondary-button" type="button">
+              <i data-lucide="check"></i>
+              <span>브라우저에 적용</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="install-main">
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>1. Supabase SQL</h2>
+              <div class="button-row">
+                <button id="reloadSqlButton" class="secondary-button" type="button">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>불러오기</span>
+                </button>
+                <button id="copySqlButton" class="primary-button" type="button">
+                  <i data-lucide="copy"></i>
+                  <span>SQL 복사</span>
+                </button>
+              </div>
+            </div>
+            <p>Supabase SQL Editor에서 이 SQL을 실행하면 게시판, 댓글, 관리자 설정, RLS 정책이 만들어져.</p>
+            <textarea id="schemaSql" class="code-box" readonly></textarea>
+          </section>
+
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>2. config.js</h2>
+              <div class="button-row">
+                <button id="generateConfigButton" class="secondary-button" type="button">
+                  <i data-lucide="file-code-2"></i>
+                  <span>생성</span>
+                </button>
+                <button id="downloadConfigButton" class="primary-button" type="button">
+                  <i data-lucide="download"></i>
+                  <span>다운로드</span>
+                </button>
+              </div>
+            </div>
+            <p>배포할 때 이 내용으로 `config.js`를 교체하면 방문자가 같은 설정을 써.</p>
+            <textarea id="configOutput" class="config-output" spellcheck="false"></textarea>
+          </section>
+
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>3. 운영 전환</h2>
+              <a class="secondary-button" href="./remove-installer.ps1" download>
+                <i data-lucide="download"></i>
+                <span>정리 스크립트</span>
+              </a>
+            </div>
+            <ul class="help-list">
+              <li>공개키를 숨기려면 Cloudflare Worker 프록시를 쓰고 `config.js`에는 `apiBaseUrl`만 넣어.</li>
+              <li>Supabase publishable key를 `config.js`에 넣는 직접 연결 모드는 브라우저에 키가 보이는 구조야.</li>
+              <li>SQL 실행 후 `공유 설정 저장`을 누르면 Supabase에 관리자 ID와 기본 설정이 들어가.</li>
+              <li>설치가 끝나면 `install.html`, `install.js`, `remove-installer.ps1`은 배포본에서 빼.</li>
+              <li>브라우저 JS는 서버 파일을 직접 삭제할 수 없어서 정리 스크립트를 제공해.</li>
+              <li>배경은 관리자 화면이나 `config.js`의 `backgroundUrl`로 나중에 바꿀 수 있어.</li>
+            </ul>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./install.js"></script>
+  </body>
+</html>
