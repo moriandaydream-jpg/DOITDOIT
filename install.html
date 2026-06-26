@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>별숲 설치</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="./config.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Install</p>
+          <h1>별숲 설치</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="installStatus" class="status-pill">대기</span>
+          <a class="icon-button" href="./index.html" title="앱 열기">
+            <i data-lucide="external-link"></i>
+            <span>앱 열기</span>
+          </a>
+        </div>
+      </header>
+
+      <main class="install-layout">
+        <aside class="panel">
+          <div class="panel-heading">
+            <h2>프로젝트 설정</h2>
+          </div>
+          <label>
+            Supabase 프로젝트 URL
+            <input id="installSupabaseUrl" autocomplete="off" spellcheck="false" placeholder="https://xxxx.supabase.co" />
+          </label>
+          <label>
+            Publishable / anon key
+            <input id="installSupabaseKey" autocomplete="off" spellcheck="false" placeholder="sb_publishable_..." />
+          </label>
+          <div class="mini-grid">
+            <label>
+              기본 모드
+              <select id="installDefaultMode">
+                <option value="board">게시판</option>
+                <option value="blog">블로그</option>
+              </select>
+            </label>
+            <label>
+              테마
+              <select id="installTheme">
+                <option value="night">한밤</option>
+                <option value="dawn">새벽</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            사이트 제목
+            <input id="installSiteTitle" maxlength="32" placeholder="별숲 블로그 보드" />
+          </label>
+          <label>
+            관리자 User ID
+            <input id="installOwnerUserId" autocomplete="off" spellcheck="false" placeholder="테스트 연결 후 자동 입력 가능" />
+          </label>
+          <label>
+            배경 이미지 URL
+            <input id="installBackgroundUrl" autocomplete="off" spellcheck="false" placeholder="./assets/shooting-star-forest.png" />
+          </label>
+          <div class="button-row">
+            <button id="testConnectionButton" class="primary-button" type="button">
+              <i data-lucide="plug-zap"></i>
+              <span>연결 테스트</span>
+            </button>
+            <button id="applyLocalButton" class="secondary-button" type="button">
+              <i data-lucide="check"></i>
+              <span>브라우저에 적용</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="install-main">
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>1. SQL 실행</h2>
+              <button id="copySqlButton" class="secondary-button" type="button">
+                <i data-lucide="copy"></i>
+                <span>SQL 복사</span>
+              </button>
+            </div>
+            <p>Supabase SQL Editor에서 아래 내용을 실행하면 게시글 테이블, 공유 설정 테이블, 기본 RLS 정책이 만들어집니다.</p>
+            <textarea id="schemaSql" class="code-box" readonly></textarea>
+          </section>
+
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>2. config.js 생성</h2>
+              <div class="button-row">
+                <button id="generateConfigButton" class="secondary-button" type="button">
+                  <i data-lucide="file-code-2"></i>
+                  <span>생성</span>
+                </button>
+                <button id="downloadConfigButton" class="primary-button" type="button">
+                  <i data-lucide="download"></i>
+                  <span>다운로드</span>
+                </button>
+              </div>
+            </div>
+            <p>배포할 때 이 내용으로 `config.js`를 교체하면 방문자들이 같은 설정을 사용합니다.</p>
+            <textarea id="configOutput" class="config-output" spellcheck="false"></textarea>
+          </section>
+
+          <section class="panel step-panel">
+            <h2>3. 권한 조정</h2>
+            <ul class="help-list">
+              <li>게시판 모드는 로그인된 익명 방문자가 글을 쓸 수 있게 되어 있습니다.</li>
+              <li>블로그 모드는 `forest_site_settings.owner_user_id`와 같은 User ID만 작성하게 되어 있습니다.</li>
+              <li>더 강하게 막고 싶으면 Supabase에서 RLS 정책을 직접 바꾸면 됩니다.</li>
+              <li>배경은 `background_url` 또는 `config.js`의 `backgroundUrl`만 바꾸면 교체됩니다.</li>
+            </ul>
+          </section>
+
+          <section class="panel step-panel">
+            <div class="panel-heading">
+              <h2>4. 운영 전환</h2>
+              <a class="secondary-button" href="./remove-installer.ps1" download>
+                <i data-lucide="download"></i>
+                <span>정리 스크립트</span>
+              </a>
+            </div>
+            <p>설치가 끝난 뒤에는 `install.html`, `install.js`, `remove-installer.ps1`을 배포본에서 제거하세요. 이 페이지는 서버 파일을 직접 삭제할 수 없어서 정리 스크립트를 함께 제공합니다.</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./install.js"></script>
+  </body>
+</html>
