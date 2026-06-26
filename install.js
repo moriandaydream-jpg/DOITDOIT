@@ -123,9 +123,17 @@
       }
       const { data, error } = await client.auth.getUser();
       if (error) throw error;
-      els.ownerUserId.value = data.user.id;
+      const { data: existingSettings, error: settingsError } = await client
+        .from("forest_site_settings")
+        .select("owner_user_id")
+        .eq("id", "main")
+        .maybeSingle();
+      if (settingsError) throw settingsError;
+      const existingOwnerId = existingSettings?.owner_user_id || "";
+      els.ownerUserId.value = existingOwnerId;
+      els.saveSharedButton.disabled = Boolean(existingOwnerId && existingOwnerId !== data.user.id);
       generateConfig();
-      setStatus("연결됨", "connected");
+      setStatus(existingOwnerId ? "연결됨 · 기존 관리자 유지" : "연결됨 · 관리자 미지정", "connected");
     } catch (error) {
       setStatus("실패", "error");
       alert(readableError(error));
@@ -179,14 +187,23 @@
       }
       const { data: userData, error: userError } = await client.auth.getUser();
       if (userError) throw userError;
-      if (!els.ownerUserId.value.trim()) els.ownerUserId.value = userData.user.id;
+      const { data: existingSettings, error: settingsError } = await client
+        .from("forest_site_settings")
+        .select("owner_user_id")
+        .eq("id", "main")
+        .maybeSingle();
+      if (settingsError) throw settingsError;
+      const existingOwnerId = existingSettings?.owner_user_id || "";
+      if (existingOwnerId && existingOwnerId !== userData.user.id) {
+        throw new Error(`OWNER_LOCKED:${existingOwnerId}`);
+      }
 
       const settings = readSettings();
       const { error } = await client.from("forest_site_settings").upsert(
         {
           id: "main",
           site_title: settings.siteTitle,
-          owner_user_id: settings.ownerUserId || userData.user.id,
+          owner_user_id: userData.user.is_anonymous ? null : settings.ownerUserId || userData.user.id,
           default_board_slug: settings.defaultBoardSlug,
           background_url: settings.backgroundUrl || null,
           theme: settings.theme,
@@ -198,7 +215,7 @@
       if (error) throw error;
       applyLocalSettings();
       generateConfig();
-      setStatus("공유 저장됨", "connected");
+      setStatus("공유 저장됨 · 메인에서 관리자 로그인", "connected");
     } catch (error) {
       setStatus("저장 실패", "error");
       alert(readableError(error));
@@ -280,8 +297,15 @@
 
   function readableError(error) {
     const message = error?.message || String(error);
+    if (message.startsWith("OWNER_LOCKED:")) {
+      const ownerId = message.slice("OWNER_LOCKED:".length);
+      return `이미 관리자가 지정되어 있어 설치 페이지의 익명 사용자로는 바꿀 수 없어. 기존 관리자 ID: ${ownerId}\n\n메인 게시판에서 카카오 관리자 로그인 후 관리 페이지를 사용해줘.`;
+    }
     if (message.toLowerCase().includes("anonymous")) {
       return "Supabase Auth에서 Anonymous sign-ins를 켜야 연결 테스트가 돼.";
+    }
+    if (message.toLowerCase().includes("row-level security")) {
+      return "기존 관리자와 현재 사용자가 달라서 RLS가 저장을 막았어. 메인 게시판에서 카카오 관리자 로그인 후 관리 페이지를 사용해줘.";
     }
     return message;
   }

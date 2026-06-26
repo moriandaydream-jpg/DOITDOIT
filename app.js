@@ -424,6 +424,7 @@
       }
       try {
         await loadSharedSettings();
+        await claimOwnerIfUnassigned();
         await enforceOwnerOnlyLogin();
         setStatus(isOwner() ? "관리자 로그인" : "프록시 연결", "connected");
         updateIdentityUi();
@@ -463,6 +464,7 @@
       if (error) throw error;
       state.user = data.user;
       await loadSharedSettings();
+      await claimOwnerIfUnassigned();
       await enforceOwnerOnlyLogin();
       setStatus(isOwner() ? "관리자 로그인" : "Supabase 연결", "connected");
       updateIdentityUi();
@@ -494,7 +496,7 @@
       state.settings = normalizeSettings({
         ...state.settings,
         siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
-        ownerUserId: local.ownerUserId ? state.settings.ownerUserId : state.sharedSettings.ownerUserId,
+        ownerUserId: state.sharedSettings.ownerUserId,
         defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
         backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
         theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
@@ -529,7 +531,7 @@
     state.settings = normalizeSettings({
       ...state.settings,
       siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
-      ownerUserId: local.ownerUserId ? state.settings.ownerUserId : state.sharedSettings.ownerUserId,
+      ownerUserId: state.sharedSettings.ownerUserId,
       defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
       backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
       theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
@@ -1311,6 +1313,36 @@
       state.user = data.user;
     }
     setNotice(`관리자 계정이 아니라서 손님 상태로 돌아왔어. 로그인한 User ID: ${rejectedUserId}`);
+  }
+
+  async function claimOwnerIfUnassigned() {
+    if (!state.supabase || !state.user?.id || state.user.is_anonymous || state.sharedSettings.ownerUserId) return;
+
+    const payload = {
+      site_title: state.settings.siteTitle,
+      owner_user_id: state.user.id,
+      default_board_slug: state.settings.defaultBoardSlug || "free",
+      background_url: state.settings.backgroundUrl || null,
+      theme: state.settings.theme,
+      skin: state.settings.skin,
+    };
+
+    if (useProxy()) {
+      await apiFetch("/api/settings", { method: "PUT", body: payload });
+    } else {
+      const { error } = await state.supabase.from(TABLES.settings).upsert(
+        {
+          id: "main",
+          ...payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+      if (error) throw error;
+    }
+
+    await loadSharedSettings();
+    setNotice("이 카카오 계정을 첫 관리자로 등록했어.");
   }
 
   function getDefaultRedirectUrl() {
