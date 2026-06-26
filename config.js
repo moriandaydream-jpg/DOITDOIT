@@ -1,8 +1,11 @@
 window.FOREST_BLOG_CONFIG = {
+  apiBaseUrl: "",
   supabaseUrl: "",
   supabaseKey: "",
   ownerUserId: "",
-  defaultMode: "board",
+  defaultBoardSlug: "free",
   backgroundUrl: "",
-  siteTitle: "별숲 블로그 보드",
+  siteTitle: "별숲 커뮤니티",
+  theme: "night",
+  skin: "forest",
 };

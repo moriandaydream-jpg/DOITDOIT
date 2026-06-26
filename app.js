@@ -1,208 +1,282 @@
 (function () {
-  const STORAGE_KEY = "forest-blog-board-settings";
-  const LOCAL_POSTS_KEY = "forest-blog-board-local-posts";
-  const LOCAL_USER_KEY = "forest-blog-board-local-user";
-  const TABLE_NAME = "forest_posts";
-  const SETTINGS_TABLE = "forest_site_settings";
+  const STORAGE_KEY = "forest-cms-settings";
+  const LOCAL_POSTS_KEY = "forest-cms-local-posts";
+  const LOCAL_COMMENTS_KEY = "forest-cms-local-comments";
+  const LOCAL_BOARDS_KEY = "forest-cms-local-boards";
+  const LOCAL_USER_KEY = "forest-cms-local-user";
   const DEFAULT_BACKGROUND = "./assets/shooting-star-forest.png";
 
-  const runtimeConfig = normalizeSettings(window.FOREST_BLOG_CONFIG || {});
-  const localUserId = getLocalUserId();
+  const TABLES = {
+    settings: "forest_site_settings",
+    boards: "forest_boards",
+    posts: "forest_posts",
+    comments: "forest_comments",
+  };
 
-  const fallbackPosts = [
+  const localUserId = getLocalUserId();
+  const runtimeConfig = normalizeSettings(window.FOREST_BLOG_CONFIG || {});
+
+  const defaultBoards = [
     {
-      id: "sample-board-1",
-      post_type: "board",
-      title: "첫 별똥별을 본 밤",
-      content: "숲 가장자리에서 하늘을 올려다봤는데, 아주 짧은 금빛 선이 지나갔어요. 오늘 게시판의 첫 기록으로 남깁니다.",
-      author_name: "별숲지기",
-      category: "공지",
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-      updated_at: null,
-      user_id: "sample",
+      id: "notice",
+      slug: "notice",
+      name: "공지사항",
+      description: "운영자가 올리는 안내 게시판",
+      board_type: "board",
+      write_role: "owner",
+      allow_comments: true,
+      skin: "table",
+      sort_order: 10,
     },
     {
-      id: "sample-board-2",
-      post_type: "board",
-      title: "함께 읽기 좋은 주제",
-      content: "오늘 들은 음악, 숲 산책 사진, 작은 질문, 읽고 있는 책 이야기를 편하게 남겨보세요.",
-      author_name: "새벽손님",
-      category: "공유",
-      created_at: new Date(Date.now() - 1000 * 60 * 95).toISOString(),
-      updated_at: null,
-      user_id: "sample",
+      id: "free",
+      slug: "free",
+      name: "자유게시판",
+      description: "방문자들이 함께 쓰는 열린 게시판",
+      board_type: "board",
+      write_role: "all",
+      allow_comments: true,
+      skin: "table",
+      sort_order: 20,
     },
     {
-      id: "sample-blog-1",
-      post_type: "blog",
-      title: "별숲 블로그를 열며",
-      content: "블로그 모드에서는 주인만 글을 쓰고, 방문자는 조용히 읽을 수 있게 구성했습니다. 게시판 모드에서는 모두가 글을 남길 수 있어요.",
+      id: "qna",
+      slug: "qna",
+      name: "질문답변",
+      description: "질문과 답변을 남기는 게시판",
+      board_type: "board",
+      write_role: "all",
+      allow_comments: true,
+      skin: "table",
+      sort_order: 30,
+    },
+    {
+      id: "blog",
+      slug: "blog",
+      name: "블로그",
+      description: "운영자만 작성하는 블로그",
+      board_type: "blog",
+      write_role: "owner",
+      allow_comments: true,
+      skin: "blog",
+      sort_order: 40,
+    },
+  ];
+
+  const samplePosts = [
+    {
+      id: "sample-1",
+      board_id: "notice",
+      user_id: "sample-owner",
+      title: "별숲 커뮤니티를 열었어",
+      content: "공지사항은 관리자만 작성하는 게시판이야. 운영 안내나 업데이트를 여기에 올리면 돼.",
       author_name: "관리자",
       category: "공지",
-      created_at: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+      is_notice: true,
+      view_count: 12,
+      created_at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
       updated_at: null,
-      user_id: "sample",
+    },
+    {
+      id: "sample-2",
+      board_id: "free",
+      user_id: "sample-guest",
+      title: "첫 별똥별 본 사람?",
+      content: "오늘 숲 배경이랑 너무 잘 어울려서 남겨봄. 여기 자유게시판은 방문자도 같이 쓰는 공간이야.",
+      author_name: "별숲손님",
+      category: "잡담",
+      is_notice: false,
+      view_count: 27,
+      created_at: new Date(Date.now() - 1000 * 60 * 105).toISOString(),
+      updated_at: null,
+    },
+    {
+      id: "sample-3",
+      board_id: "blog",
+      user_id: "sample-owner",
+      title: "블로그 모드는 이렇게 써",
+      content: "블로그 게시판은 write_role이 owner라서 관리자 User ID와 같은 사람만 작성할 수 있어. 댓글은 게시판 설정에서 켜고 끌 수 있어.",
+      author_name: "관리자",
+      category: "정보",
+      is_notice: false,
+      view_count: 8,
+      created_at: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
+      updated_at: null,
+    },
+  ];
+
+  const sampleComments = [
+    {
+      id: "comment-1",
+      post_id: "sample-2",
+      user_id: "sample-guest-2",
+      author_name: "새벽손님",
+      content: "그누보드 느낌 나서 좋다.",
+      created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      updated_at: null,
     },
   ];
 
   const state = {
     supabase: null,
     user: null,
-    posts: [],
-    selectedPost: null,
-    editMode: false,
-    loading: false,
-    subscription: null,
-    sharedSettings: {},
     settings: loadSettings(),
-    activeMode: "board",
-    localUserId,
+    sharedSettings: {},
+    boards: [],
+    posts: [],
+    commentCounts: new Map(),
+    selectedBoardId: null,
+    selectedPost: null,
+    editingPost: null,
+    editingBoardId: null,
+    subscription: null,
+    loading: false,
   };
 
   const els = {
+    siteTitle: document.getElementById("siteTitle"),
     connectionBadge: document.getElementById("connectionBadge"),
     refreshButton: document.getElementById("refreshButton"),
-    settingsButton: document.getElementById("settingsButton"),
-    closeSettingsButton: document.getElementById("closeSettingsButton"),
-    setupPanel: document.getElementById("setupPanel"),
+    adminToggleButton: document.getElementById("adminToggleButton"),
+    adminPanel: document.getElementById("adminPanel"),
+    closeAdminButton: document.getElementById("closeAdminButton"),
+    roleBadge: document.getElementById("roleBadge"),
+    displayName: document.getElementById("displayName"),
+    saveNameButton: document.getElementById("saveNameButton"),
+    currentUserLabel: document.getElementById("currentUserLabel"),
+    boardCountLabel: document.getElementById("boardCountLabel"),
+    boardNav: document.getElementById("boardNav"),
     supabaseUrl: document.getElementById("supabaseUrl"),
     supabaseKey: document.getElementById("supabaseKey"),
-    displayName: document.getElementById("displayName"),
-    defaultModeSelect: document.getElementById("defaultModeSelect"),
+    apiBaseUrl: document.getElementById("apiBaseUrl"),
+    adminToken: document.getElementById("adminToken"),
     ownerUserId: document.getElementById("ownerUserId"),
     useCurrentUserButton: document.getElementById("useCurrentUserButton"),
-    currentUserLabel: document.getElementById("currentUserLabel"),
-    backgroundUrl: document.getElementById("backgroundUrl"),
-    themeSelect: document.getElementById("themeSelect"),
-    siteTitleInput: document.getElementById("siteTitleInput"),
-    siteTitle: document.getElementById("siteTitle"),
     saveSettingsButton: document.getElementById("saveSettingsButton"),
+    siteTitleInput: document.getElementById("siteTitleInput"),
+    defaultBoardSelect: document.getElementById("defaultBoardSelect"),
+    themeSelect: document.getElementById("themeSelect"),
+    skinSelect: document.getElementById("skinSelect"),
+    backgroundUrl: document.getElementById("backgroundUrl"),
     saveSharedSettingsButton: document.getElementById("saveSharedSettingsButton"),
     clearSettingsButton: document.getElementById("clearSettingsButton"),
-    composerPanel: document.getElementById("composerPanel"),
-    composerTitle: document.getElementById("composerTitle"),
-    postForm: document.getElementById("postForm"),
-    postTitle: document.getElementById("postTitle"),
-    postCategory: document.getElementById("postCategory"),
-    postContent: document.getElementById("postContent"),
-    submitPostButton: document.getElementById("submitPostButton"),
-    draftState: document.getElementById("draftState"),
+    boardAdminList: document.getElementById("boardAdminList"),
+    newBoardButton: document.getElementById("newBoardButton"),
+    boardForm: document.getElementById("boardForm"),
+    boardSlug: document.getElementById("boardSlug"),
+    boardName: document.getElementById("boardName"),
+    boardDescription: document.getElementById("boardDescription"),
+    boardType: document.getElementById("boardType"),
+    boardWriteRole: document.getElementById("boardWriteRole"),
+    boardSkin: document.getElementById("boardSkin"),
+    boardSortOrder: document.getElementById("boardSortOrder"),
+    boardAllowComments: document.getElementById("boardAllowComments"),
+    boardPath: document.getElementById("boardPath"),
+    activeBoardName: document.getElementById("activeBoardName"),
+    activeBoardDescription: document.getElementById("activeBoardDescription"),
+    writePolicyBadge: document.getElementById("writePolicyBadge"),
+    writePostButton: document.getElementById("writePostButton"),
     searchInput: document.getElementById("searchInput"),
     categoryFilter: document.getElementById("categoryFilter"),
     sortSelect: document.getElementById("sortSelect"),
     postCount: document.getElementById("postCount"),
-    memberTag: document.getElementById("memberTag"),
-    modeTag: document.getElementById("modeTag"),
+    commentCount: document.getElementById("commentCount"),
+    storageMode: document.getElementById("storageMode"),
     notice: document.getElementById("notice"),
     postList: document.getElementById("postList"),
+    postEditorDialog: document.getElementById("postEditorDialog"),
+    editorBoardLabel: document.getElementById("editorBoardLabel"),
+    editorTitle: document.getElementById("editorTitle"),
+    closeEditorButton: document.getElementById("closeEditorButton"),
+    postForm: document.getElementById("postForm"),
+    postTitle: document.getElementById("postTitle"),
+    postCategory: document.getElementById("postCategory"),
+    postContent: document.getElementById("postContent"),
+    postIsNotice: document.getElementById("postIsNotice"),
+    submitPostButton: document.getElementById("submitPostButton"),
     postDialog: document.getElementById("postDialog"),
+    closePostButton: document.getElementById("closePostButton"),
     dialogCategory: document.getElementById("dialogCategory"),
     dialogTitle: document.getElementById("dialogTitle"),
     dialogMeta: document.getElementById("dialogMeta"),
     dialogContent: document.getElementById("dialogContent"),
-    editArea: document.getElementById("editArea"),
-    editTitle: document.getElementById("editTitle"),
-    editCategory: document.getElementById("editCategory"),
-    editContent: document.getElementById("editContent"),
-    editButton: document.getElementById("editButton"),
-    saveEditButton: document.getElementById("saveEditButton"),
-    deleteButton: document.getElementById("deleteButton"),
-    modeTabs: Array.from(document.querySelectorAll(".mode-tab")),
+    editPostButton: document.getElementById("editPostButton"),
+    deletePostButton: document.getElementById("deletePostButton"),
+    dialogCommentCount: document.getElementById("dialogCommentCount"),
+    commentList: document.getElementById("commentList"),
+    commentForm: document.getElementById("commentForm"),
+    commentContent: document.getElementById("commentContent"),
+    submitCommentButton: document.getElementById("submitCommentButton"),
   };
 
   init();
 
   async function init() {
-    state.activeMode = sanitizeMode(state.settings.defaultMode);
-    hydrateSettings();
-    bindEvents();
+    hydrateSettingsForm();
     applyVisualSettings();
+    bindEvents();
     renderIcons();
     await connectIfConfigured();
+    await loadBoards();
+    selectInitialBoard();
     await loadPosts();
   }
 
-  function hydrateSettings() {
-    els.supabaseUrl.value = state.settings.supabaseUrl;
-    els.supabaseKey.value = state.settings.supabaseKey;
-    els.displayName.value = state.settings.displayName || createGuestName();
-    els.defaultModeSelect.value = sanitizeMode(state.settings.defaultMode);
-    els.ownerUserId.value = state.settings.ownerUserId;
-    els.backgroundUrl.value = state.settings.backgroundUrl;
-    els.themeSelect.value = state.settings.theme;
-    els.siteTitleInput.value = state.settings.siteTitle;
-    updateCurrentUserLabel();
-    updateModeUi();
-  }
-
   function bindEvents() {
-    els.settingsButton.addEventListener("click", () => {
-      els.setupPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-      els.supabaseUrl.focus();
+    els.refreshButton.addEventListener("click", async () => {
+      await loadBoards();
+      await loadPosts();
     });
 
-    els.closeSettingsButton.addEventListener("click", () => {
-      els.postTitle.focus();
+    els.adminToggleButton.addEventListener("click", () => {
+      els.adminPanel.hidden = !els.adminPanel.hidden;
+      if (!els.adminPanel.hidden) els.supabaseUrl.focus();
     });
 
-    els.refreshButton.addEventListener("click", () => loadPosts());
+    els.closeAdminButton.addEventListener("click", () => {
+      els.adminPanel.hidden = true;
+    });
+
+    els.saveNameButton.addEventListener("click", () => {
+      state.settings.displayName = sanitizeText(els.displayName.value, 24) || createGuestName();
+      persistSettings();
+      updateIdentityUi();
+    });
 
     els.useCurrentUserButton.addEventListener("click", () => {
       if (!state.user?.id) {
-        setNotice("Supabase에 연결되면 현재 User ID를 관리자 ID로 지정할 수 있습니다.");
+        setNotice("Supabase 연결 뒤에 현재 User ID를 가져올 수 있어.");
         return;
       }
       els.ownerUserId.value = state.user.id;
-      setNotice("현재 User ID를 관리자 ID 입력칸에 넣었습니다.");
+      setNotice("현재 User ID를 관리자 ID 칸에 넣었어.");
     });
 
     els.saveSettingsButton.addEventListener("click", async () => {
       state.settings = readSettingsForm();
-      state.activeMode = sanitizeMode(state.settings.defaultMode);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.settings));
+      persistSettings();
       applyVisualSettings();
-      updateModeUi();
       await connectIfConfigured(true);
+      await loadBoards();
+      selectInitialBoard();
       await loadPosts();
     });
 
-    els.saveSharedSettingsButton.addEventListener("click", async () => {
-      state.settings = readSettingsForm();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.settings));
-      applyVisualSettings();
-      await saveSharedSettings();
-    });
+    els.saveSharedSettingsButton.addEventListener("click", saveSharedSettings);
 
     els.clearSettingsButton.addEventListener("click", async () => {
       localStorage.removeItem(STORAGE_KEY);
       state.settings = loadSettings();
-      state.sharedSettings = {};
-      state.supabase = null;
-      state.user = null;
-      state.activeMode = sanitizeMode(state.settings.defaultMode);
-      hydrateSettings();
+      hydrateSettingsForm();
       applyVisualSettings();
+      await connectIfConfigured();
+      await loadBoards();
+      selectInitialBoard();
       await loadPosts();
     });
 
-    [els.themeSelect, els.backgroundUrl, els.siteTitleInput].forEach((input) => {
-      input.addEventListener("change", () => {
-        const preview = readSettingsForm();
-        applyVisualSettings(preview);
-      });
-    });
-
-    els.postForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await createPost();
-    });
-
-    els.modeTabs.forEach((button) => {
-      button.addEventListener("click", async () => {
-        state.activeMode = sanitizeMode(button.dataset.mode);
-        updateModeUi();
-        await loadPosts();
-      });
+    [els.siteTitleInput, els.themeSelect, els.skinSelect, els.backgroundUrl].forEach((input) => {
+      input.addEventListener("change", () => applyVisualSettings(readSettingsForm()));
     });
 
     [els.searchInput, els.categoryFilter, els.sortSelect].forEach((input) => {
@@ -210,30 +284,78 @@
       input.addEventListener("change", renderPosts);
     });
 
-    els.editButton.addEventListener("click", () => setDialogEditMode(true));
-    els.saveEditButton.addEventListener("click", () => saveSelectedPost());
-    els.deleteButton.addEventListener("click", () => deleteSelectedPost());
-    els.postDialog.addEventListener("close", () => {
-      state.editMode = false;
-      state.selectedPost = null;
+    els.writePostButton.addEventListener("click", () => openEditor());
+    els.closeEditorButton.addEventListener("click", () => els.postEditorDialog.close());
+    els.postForm.addEventListener("submit", savePost);
+
+    els.closePostButton.addEventListener("click", () => els.postDialog.close());
+    els.editPostButton.addEventListener("click", () => {
+      if (state.selectedPost) openEditor(state.selectedPost);
     });
+    els.deletePostButton.addEventListener("click", deleteSelectedPost);
+    els.commentForm.addEventListener("submit", saveComment);
+
+    els.newBoardButton.addEventListener("click", () => fillBoardForm(null));
+    els.boardForm.addEventListener("submit", saveBoard);
+  }
+
+  function useProxy() {
+    return Boolean(state.settings.apiBaseUrl);
+  }
+
+  async function apiFetch(path, options = {}) {
+    const baseUrl = state.settings.apiBaseUrl.replace(/\/+$/, "");
+    const headers = {
+      "content-type": "application/json",
+      "x-forest-client-id": localUserId,
+      ...(options.headers || {}),
+    };
+    if (state.settings.adminToken) {
+      headers.authorization = `Bearer ${state.settings.adminToken}`;
+    }
+
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      headers,
+      body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || response.statusText);
+    }
+    return data;
   }
 
   async function connectIfConfigured(forceNotice) {
+    if (useProxy()) {
+      state.supabase = null;
+      state.user = null;
+      setStatus("프록시 연결", "connected");
+      updateIdentityUi();
+      try {
+        await loadSharedSettings();
+        if (forceNotice) setNotice("프록시 설정 저장했어.");
+      } catch (error) {
+        setStatus("프록시 실패", "error");
+        setNotice(readableError(error));
+      }
+      return;
+    }
+
     const { supabaseUrl, supabaseKey } = state.settings;
     if (!supabaseUrl || !supabaseKey) {
       state.supabase = null;
       state.user = null;
       setStatus("로컬 미리보기", "local");
-      setNotice("Supabase URL과 publishable/anon key를 넣으면 공유 게시판으로 전환됩니다.");
-      updateCurrentUserLabel();
-      updateModeUi();
+      updateIdentityUi();
+      setNotice("Supabase URL과 publishable/anon key를 저장하면 공유 게시판으로 바뀌어.");
       return;
     }
 
     if (!window.supabase?.createClient) {
-      setStatus("SDK 로드 실패", "error");
-      setNotice("Supabase SDK를 불러오지 못했습니다. 인터넷 연결 또는 CDN 차단을 확인하세요.");
+      setStatus("SDK 실패", "error");
+      setNotice("Supabase SDK를 불러오지 못했어. CDN 접근을 확인해줘.");
       return;
     }
 
@@ -245,89 +367,135 @@
         if (error) throw error;
       }
 
-      const { data: userData, error: userError } = await state.supabase.auth.getUser();
-      if (userError) throw userError;
-      state.user = userData.user;
+      const { data, error } = await state.supabase.auth.getUser();
+      if (error) throw error;
+      state.user = data.user;
       await loadSharedSettings();
-      setStatus("Supabase 연결됨", "connected");
-      setNotice(forceNotice ? "연결 설정을 저장했습니다." : "");
-      updateCurrentUserLabel();
-      updateModeUi();
-      subscribeToChanges();
+      setStatus("Supabase 연결", "connected");
+      updateIdentityUi();
+      if (forceNotice) setNotice("연결 설정 저장했어.");
+      subscribeRealtime();
     } catch (error) {
       state.supabase = null;
       state.user = null;
       setStatus("연결 실패", "error");
+      updateIdentityUi();
       setNotice(readableError(error));
-      updateCurrentUserLabel();
-      updateModeUi();
     }
   }
 
   async function loadSharedSettings() {
+    if (useProxy()) {
+      const data = await apiFetch("/api/settings");
+      if (!data?.settings) return;
+      const settings = data.settings;
+      state.sharedSettings = {
+        siteTitle: settings.site_title || "",
+        ownerUserId: settings.owner_user_id || "",
+        defaultBoardSlug: settings.default_board_slug || "",
+        backgroundUrl: settings.background_url || "",
+        theme: settings.theme || "",
+        skin: settings.skin || "",
+      };
+      const local = loadLocalSettings();
+      state.settings = normalizeSettings({
+        ...state.settings,
+        siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
+        ownerUserId: local.ownerUserId ? state.settings.ownerUserId : state.sharedSettings.ownerUserId,
+        defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
+        backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
+        theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
+        skin: local.skin ? state.settings.skin : state.sharedSettings.skin,
+      });
+      hydrateSettingsForm();
+      applyVisualSettings();
+      return;
+    }
+
     if (!state.supabase) return;
 
     const { data, error } = await state.supabase
-      .from(SETTINGS_TABLE)
-      .select("id,site_title,owner_user_id,default_mode,background_url")
+      .from(TABLES.settings)
+      .select("site_title,owner_user_id,default_board_slug,background_url,theme,skin")
       .eq("id", "main")
       .maybeSingle();
 
-    if (error) {
-      if (String(error.message || "").includes(SETTINGS_TABLE)) return;
-      throw error;
-    }
-
+    if (error) throw error;
     if (!data) return;
 
     state.sharedSettings = {
       siteTitle: data.site_title || "",
       ownerUserId: data.owner_user_id || "",
-      defaultMode: sanitizeMode(data.default_mode || state.settings.defaultMode),
+      defaultBoardSlug: data.default_board_slug || "",
       backgroundUrl: data.background_url || "",
+      theme: data.theme || "",
+      skin: data.skin || "",
     };
 
-    const localOverrides = getLocalOverrides();
+    const local = loadLocalSettings();
     state.settings = normalizeSettings({
       ...state.settings,
-      siteTitle: localOverrides.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
-      ownerUserId: localOverrides.ownerUserId ? state.settings.ownerUserId : state.sharedSettings.ownerUserId,
-      defaultMode: localOverrides.defaultMode ? state.settings.defaultMode : state.sharedSettings.defaultMode,
-      backgroundUrl: localOverrides.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
+      siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
+      ownerUserId: local.ownerUserId ? state.settings.ownerUserId : state.sharedSettings.ownerUserId,
+      defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
+      backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
+      theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
+      skin: local.skin ? state.settings.skin : state.sharedSettings.skin,
     });
-    state.activeMode = sanitizeMode(state.settings.defaultMode);
-    hydrateSettings();
+    hydrateSettingsForm();
     applyVisualSettings();
   }
 
   async function saveSharedSettings() {
-    if (!state.supabase) {
-      setNotice("Supabase 연결 후 공유 설정을 저장할 수 있습니다.");
+    if (useProxy()) {
+      setLoading(true);
+      try {
+        state.settings = readSettingsForm();
+        persistSettings();
+        await apiFetch("/api/settings", {
+          method: "PUT",
+          body: {
+            site_title: state.settings.siteTitle,
+            owner_user_id: state.settings.ownerUserId || null,
+            default_board_slug: state.settings.defaultBoardSlug || activeBoard()?.slug || "free",
+            background_url: state.settings.backgroundUrl || null,
+            theme: state.settings.theme,
+            skin: state.settings.skin,
+          },
+        });
+        setNotice("프록시 공유 설정 저장했어.");
+      } catch (error) {
+        setNotice(readableError(error));
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    setLoading(true, "저장 중");
+    if (!state.supabase) {
+      setNotice("Supabase 연결 후 공유 설정을 저장할 수 있어.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const settings = readSettingsForm();
-      const { error } = await state.supabase.from(SETTINGS_TABLE).upsert(
+      state.settings = readSettingsForm();
+      persistSettings();
+      const { error } = await state.supabase.from(TABLES.settings).upsert(
         {
           id: "main",
-          site_title: settings.siteTitle,
-          owner_user_id: settings.ownerUserId || null,
-          default_mode: sanitizeMode(settings.defaultMode),
-          background_url: settings.backgroundUrl || null,
+          site_title: state.settings.siteTitle,
+          owner_user_id: state.settings.ownerUserId || null,
+          default_board_slug: state.settings.defaultBoardSlug || activeBoard()?.slug || "free",
+          background_url: state.settings.backgroundUrl || null,
+          theme: state.settings.theme,
+          skin: state.settings.skin,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" }
       );
       if (error) throw error;
-      state.sharedSettings = {
-        siteTitle: settings.siteTitle,
-        ownerUserId: settings.ownerUserId,
-        defaultMode: settings.defaultMode,
-        backgroundUrl: settings.backgroundUrl,
-      };
-      setNotice("공유 설정을 저장했습니다.");
+      setNotice("공유 설정 저장했어.");
     } catch (error) {
       setNotice(readableError(error));
     } finally {
@@ -335,96 +503,95 @@
     }
   }
 
-  function subscribeToChanges() {
+  function subscribeRealtime() {
     if (!state.supabase || state.subscription) return;
 
     state.subscription = state.supabase
-      .channel("forest-blog-board-feed")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: TABLE_NAME },
-        () => loadPosts()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: SETTINGS_TABLE },
-        async () => {
-          await loadSharedSettings();
-          await loadPosts();
-        }
-      )
+      .channel("forest-cms")
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.boards }, async () => {
+        await loadBoards();
+        await loadPosts();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.posts }, () => loadPosts())
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.comments }, () => loadPosts())
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.settings }, async () => {
+        await loadSharedSettings();
+        await loadBoards();
+        await loadPosts();
+      })
       .subscribe();
   }
 
-  async function loadPosts() {
-    setLoading(true);
+  async function loadBoards() {
     try {
-      if (state.supabase) {
+      if (useProxy()) {
+        const data = await apiFetch("/api/boards");
+        state.boards = data?.boards || [];
+      } else if (state.supabase) {
         const { data, error } = await state.supabase
-          .from(TABLE_NAME)
-          .select("id,post_type,title,content,author_name,category,created_at,updated_at,user_id")
-          .eq("post_type", state.activeMode)
-          .order("created_at", { ascending: false });
-
+          .from(TABLES.boards)
+          .select("id,slug,name,description,board_type,write_role,allow_comments,skin,sort_order")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true });
         if (error) throw error;
-        state.posts = data || [];
+        state.boards = data || [];
       } else {
-        state.posts = loadLocalPosts().filter((post) => post.post_type === state.activeMode);
+        state.boards = loadLocalBoards();
       }
-      renderPosts();
-      updateSummary();
+
+      if (!state.boards.length) state.boards = defaultBoards.slice();
+      renderBoards();
+      hydrateBoardSelect();
     } catch (error) {
       setNotice(readableError(error));
-    } finally {
-      setLoading(false);
+      state.boards = defaultBoards.slice();
+      renderBoards();
     }
   }
 
-  async function createPost() {
-    if (!canCreateActiveMode()) {
-      setNotice("블로그 모드는 관리자만 작성할 수 있습니다.");
+  function selectInitialBoard() {
+    const current = state.boards.find((board) => board.id === state.selectedBoardId);
+    if (current) return;
+
+    const desired = state.settings.defaultBoardSlug || "free";
+    const bySlug = state.boards.find((board) => board.slug === desired);
+    state.selectedBoardId = (bySlug || state.boards[0])?.id || null;
+    renderBoards();
+  }
+
+  async function loadPosts() {
+    const board = activeBoard();
+    if (!board) {
+      renderPosts();
       return;
     }
 
-    const title = sanitizeText(els.postTitle.value, 80);
-    const content = sanitizeText(els.postContent.value, 4000);
-    const category = els.postCategory.value;
-    const author_name = sanitizeText(els.displayName.value, 24) || createGuestName();
-
-    if (!title || !content) return;
-
-    setLoading(true, "게시 중");
+    setLoading(true);
     try {
-      if (state.supabase) {
-        const payload = {
-          post_type: state.activeMode,
-          title,
-          content,
-          category,
-          author_name,
-          user_id: state.user?.id,
-        };
-        const { error } = await state.supabase.from(TABLE_NAME).insert(payload);
-        if (error) throw error;
-      } else {
-        const posts = loadLocalPosts();
-        posts.unshift({
-          id: crypto.randomUUID(),
-          post_type: state.activeMode,
-          title,
-          content,
-          category,
-          author_name,
-          created_at: new Date().toISOString(),
-          updated_at: null,
-          user_id: state.localUserId,
+      if (useProxy()) {
+        const data = await apiFetch(`/api/posts?boardId=${encodeURIComponent(board.id)}`);
+        state.posts = data?.posts || [];
+        state.commentCounts = new Map();
+        state.posts.forEach((post) => {
+          state.commentCounts.set(post.id, post.comment_count || 0);
         });
-        saveLocalPosts(posts);
+      } else if (state.supabase) {
+        const { data, error } = await state.supabase
+          .from(TABLES.posts)
+          .select("id,board_id,user_id,title,content,author_name,category,is_notice,view_count,created_at,updated_at")
+          .eq("board_id", board.id)
+          .order("is_notice", { ascending: false })
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        state.posts = data || [];
+        await loadCommentCounts();
+      } else {
+        state.posts = loadLocalPosts().filter((post) => post.board_id === board.id);
+        loadLocalCommentCounts();
       }
 
-      els.postForm.reset();
-      els.postCategory.value = category;
-      await loadPosts();
+      renderBoardHeader();
+      renderPosts();
     } catch (error) {
       setNotice(readableError(error));
     } finally {
@@ -432,33 +599,366 @@
     }
   }
 
-  async function saveSelectedPost() {
-    if (!state.selectedPost || !canEditPost(state.selectedPost)) return;
+  async function loadCommentCounts() {
+    state.commentCounts = new Map();
+    const ids = state.posts.map((post) => post.id);
+    if (!ids.length) return;
 
-    const title = sanitizeText(els.editTitle.value, 80);
-    const content = sanitizeText(els.editContent.value, 4000);
-    const category = els.editCategory.value;
-    if (!title || !content) return;
+    const { data, error } = await state.supabase
+      .from(TABLES.comments)
+      .select("id,post_id")
+      .in("post_id", ids);
+    if (error) throw error;
+    (data || []).forEach((comment) => {
+      state.commentCounts.set(comment.post_id, (state.commentCounts.get(comment.post_id) || 0) + 1);
+    });
+  }
 
-    setLoading(true, "저장 중");
-    try {
-      if (state.supabase) {
-        const { error } = await state.supabase
-          .from(TABLE_NAME)
-          .update({ title, content, category, updated_at: new Date().toISOString() })
-          .eq("id", state.selectedPost.id);
-        if (error) throw error;
+  function loadLocalCommentCounts() {
+    state.commentCounts = new Map();
+    const comments = loadLocalComments();
+    comments.forEach((comment) => {
+      state.commentCounts.set(comment.post_id, (state.commentCounts.get(comment.post_id) || 0) + 1);
+    });
+  }
+
+  function renderBoards() {
+    els.boardNav.innerHTML = "";
+    state.boards.forEach((board) => {
+      const button = document.createElement("button");
+      button.className = "nav-button";
+      button.type = "button";
+      button.classList.toggle("active", board.id === state.selectedBoardId);
+      button.innerHTML = `<i data-lucide="${board.board_type === "blog" ? "book-open-text" : "messages-square"}"></i><span>${escapeHtml(board.name)}</span>`;
+      button.addEventListener("click", async () => {
+        state.selectedBoardId = board.id;
+        state.settings.defaultBoardSlug = board.slug;
+        persistSettings();
+        renderBoards();
+        await loadPosts();
+      });
+      els.boardNav.append(button);
+    });
+    els.boardCountLabel.textContent = String(state.boards.length);
+    renderBoardAdminList();
+    renderIcons();
+  }
+
+  function renderBoardAdminList() {
+    els.boardAdminList.innerHTML = "";
+    state.boards.forEach((board) => {
+      const item = document.createElement("button");
+      item.className = "admin-board-item";
+      item.type = "button";
+      item.classList.toggle("active", board.id === state.editingBoardId);
+      item.innerHTML = `<span>${escapeHtml(board.name)}</span><small>${escapeHtml(board.slug)}</small>`;
+      item.addEventListener("click", () => fillBoardForm(board));
+      els.boardAdminList.append(item);
+    });
+  }
+
+  function hydrateBoardSelect() {
+    els.defaultBoardSelect.innerHTML = "";
+    state.boards.forEach((board) => {
+      const option = document.createElement("option");
+      option.value = board.slug;
+      option.textContent = board.name;
+      els.defaultBoardSelect.append(option);
+    });
+    els.defaultBoardSelect.value = state.settings.defaultBoardSlug || activeBoard()?.slug || "free";
+  }
+
+  function renderBoardHeader() {
+    const board = activeBoard();
+    if (!board) return;
+
+    els.boardPath.textContent = `홈 / ${board.name}`;
+    els.activeBoardName.textContent = board.name;
+    els.activeBoardDescription.textContent = board.description || "설명이 없는 게시판";
+    const canWrite = canWriteBoard(board);
+    els.writePolicyBadge.textContent = canWrite ? "쓰기 가능" : "읽기 전용";
+    els.writePolicyBadge.classList.toggle("connected", canWrite);
+    els.writePostButton.disabled = !canWrite;
+    els.editorBoardLabel.textContent = board.name;
+    els.storageMode.textContent = state.supabase ? "Supabase" : "로컬";
+  }
+
+  function renderPosts() {
+    const board = activeBoard();
+    renderBoardHeader();
+    if (!board) {
+      els.postList.innerHTML = `<div class="empty-state">게시판이 아직 없어.</div>`;
+      return;
+    }
+
+    const query = els.searchInput.value.trim().toLowerCase();
+    const category = els.categoryFilter.value;
+    const sort = els.sortSelect.value;
+    const posts = state.posts
+      .filter((post) => category === "all" || post.category === category)
+      .filter((post) => {
+        if (!query) return true;
+        return [post.title, post.content, post.author_name, post.category].join(" ").toLowerCase().includes(query);
+      })
+      .sort((a, b) => {
+        if (a.is_notice !== b.is_notice) return a.is_notice ? -1 : 1;
+        if (sort === "oldest") return new Date(a.created_at) - new Date(b.created_at);
+        if (sort === "views") return (b.view_count || 0) - (a.view_count || 0);
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+
+    const totalComments = posts.reduce((sum, post) => sum + (state.commentCounts.get(post.id) || 0), 0);
+    els.postCount.textContent = String(posts.length);
+    els.commentCount.textContent = String(totalComments);
+
+    if (!posts.length) {
+      els.postList.innerHTML = `<div class="empty-state">아직 글이 없어.</div>`;
+      return;
+    }
+
+    if (board.skin === "blog" || board.board_type === "blog") {
+      renderBlogCards(posts);
+    } else {
+      renderPostTable(posts);
+    }
+    renderIcons();
+  }
+
+  function renderPostTable(posts) {
+    const rows = posts
+      .map((post, index) => {
+        const numberLabel = post.is_notice ? "공지" : String(posts.length - index);
+        const comments = state.commentCounts.get(post.id) || 0;
+        return `
+          <tr>
+            <td>${numberLabel}</td>
+            <td>
+              <button class="post-title-cell" type="button" data-post-id="${post.id}">
+                ${post.is_notice ? '<span class="notice-mark">공지</span>' : ""}
+                <strong>${escapeHtml(post.title)}</strong>
+                ${comments ? `<span class="comment-badge">[${comments}]</span>` : ""}
+              </button>
+            </td>
+            <td>${escapeHtml(post.category)}</td>
+            <td>${escapeHtml(post.author_name)}</td>
+            <td>${formatDate(post.created_at)}</td>
+            <td>${post.view_count || 0}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    els.postList.innerHTML = `
+      <div class="post-table-wrap">
+        <table class="post-table">
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>제목</th>
+              <th>분류</th>
+              <th>글쓴이</th>
+              <th>날짜</th>
+              <th>조회</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+
+    els.postList.querySelectorAll("[data-post-id]").forEach((button) => {
+      button.addEventListener("click", () => openPost(button.dataset.postId));
+    });
+  }
+
+  function renderBlogCards(posts) {
+    els.postList.innerHTML = `<div class="blog-list"></div>`;
+    const wrap = els.postList.querySelector(".blog-list");
+    posts.forEach((post) => {
+      const comments = state.commentCounts.get(post.id) || 0;
+      const card = document.createElement("button");
+      card.className = "blog-card";
+      card.type = "button";
+      card.innerHTML = `
+        <span class="category-chip">${escapeHtml(post.category)}</span>
+        <h3>${escapeHtml(post.title)}</h3>
+        <p>${escapeHtml(post.content)}</p>
+        <div class="post-meta">
+          <span>${escapeHtml(post.author_name)} · ${formatDate(post.created_at)}</span>
+          <span>조회 ${post.view_count || 0} · 댓글 ${comments}</span>
+        </div>
+      `;
+      card.addEventListener("click", () => openPost(post.id));
+      wrap.append(card);
+    });
+  }
+
+  async function openPost(postId) {
+    const post = state.posts.find((item) => item.id === postId);
+    if (!post) return;
+    state.selectedPost = post;
+    els.dialogCategory.textContent = post.category || "일반";
+    els.dialogTitle.textContent = post.title;
+    els.dialogMeta.textContent = `${post.author_name || "익명"} · ${formatDate(post.created_at)} · 조회 ${post.view_count || 0}${
+      post.updated_at ? " · 수정됨" : ""
+    }`;
+    els.dialogContent.textContent = post.content;
+    els.editPostButton.hidden = !canEditPost(post);
+    els.deletePostButton.hidden = !canEditPost(post);
+    await incrementView(post);
+    await loadComments(post.id);
+    els.postDialog.showModal();
+  }
+
+  async function incrementView(post) {
+    post.view_count = (post.view_count || 0) + 1;
+    if (useProxy()) {
+      await apiFetch(`/api/posts/${encodeURIComponent(post.id)}/view`, { method: "POST" });
+    } else if (state.supabase) {
+      await state.supabase.rpc("increment_forest_post_view", { post_uuid: post.id });
+    } else {
+      const posts = loadLocalPosts().map((item) =>
+        item.id === post.id ? { ...item, view_count: (item.view_count || 0) + 1 } : item
+      );
+      saveLocalPosts(posts);
+    }
+    renderPosts();
+  }
+
+  async function loadComments(postId) {
+    let comments = [];
+    const board = activeBoard();
+    if (useProxy()) {
+      const data = await apiFetch(`/api/comments?postId=${encodeURIComponent(postId)}`);
+      comments = data?.comments || [];
+    } else if (state.supabase) {
+      const { data, error } = await state.supabase
+        .from(TABLES.comments)
+        .select("id,post_id,user_id,author_name,content,created_at,updated_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
+      if (error) {
+        setNotice(readableError(error));
       } else {
-        const posts = loadLocalPosts().map((post) =>
-          post.id === state.selectedPost.id
-            ? { ...post, title, content, category, updated_at: new Date().toISOString() }
-            : post
-        );
-        saveLocalPosts(posts);
+        comments = data || [];
       }
+    } else {
+      comments = loadLocalComments().filter((comment) => comment.post_id === postId);
+    }
+    renderComments(comments);
+    const allowed = Boolean(board?.allow_comments);
+    els.commentForm.hidden = !allowed;
+    els.dialogCommentCount.textContent = String(comments.length);
+  }
+
+  function renderComments(comments) {
+    els.commentList.innerHTML = "";
+    if (!comments.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "댓글이 아직 없어.";
+      els.commentList.append(empty);
+      return;
+    }
+
+    comments.forEach((comment) => {
+      const item = document.createElement("div");
+      item.className = "comment-item";
+      const canDelete = canEditComment(comment);
+      item.innerHTML = `
+        <div class="comment-meta">
+          <span>${escapeHtml(comment.author_name)} · ${formatDate(comment.created_at)}</span>
+          ${canDelete ? `<button class="ghost-icon" type="button" data-comment-id="${comment.id}" title="댓글 삭제"><i data-lucide="trash-2"></i></button>` : ""}
+        </div>
+        <p>${escapeHtml(comment.content)}</p>
+      `;
+      els.commentList.append(item);
+    });
+
+    els.commentList.querySelectorAll("[data-comment-id]").forEach((button) => {
+      button.addEventListener("click", () => deleteComment(button.dataset.commentId));
+    });
+    renderIcons();
+  }
+
+  function openEditor(post) {
+    const board = activeBoard();
+    if (!board || (!post && !canWriteBoard(board))) {
+      setNotice("이 게시판은 지금 글쓰기가 막혀 있어.");
+      return;
+    }
+
+    state.editingPost = post || null;
+    els.editorTitle.textContent = post ? "글 수정" : "글쓰기";
+    els.editorBoardLabel.textContent = board.name;
+    els.postTitle.value = post?.title || "";
+    els.postCategory.value = post?.category || "일반";
+    els.postContent.value = post?.content || "";
+    els.postIsNotice.checked = Boolean(post?.is_notice);
+    els.postIsNotice.disabled = !isOwner();
+    els.postEditorDialog.showModal();
+  }
+
+  async function savePost(event) {
+    event.preventDefault();
+    const board = activeBoard();
+    if (!board) return;
+
+    const payload = {
+      board_id: board.id,
+      title: sanitizeText(els.postTitle.value, 100),
+      content: sanitizeText(els.postContent.value, 8000),
+      category: sanitizeText(els.postCategory.value, 20) || "일반",
+      author_name: sanitizeText(els.displayName.value, 24) || createGuestName(),
+      is_notice: isOwner() && els.postIsNotice.checked,
+    };
+
+    if (!payload.title || !payload.content) return;
+
+    setLoading(true);
+    try {
+      if (useProxy()) {
+        if (state.editingPost) {
+          await apiFetch(`/api/posts/${encodeURIComponent(state.editingPost.id)}`, {
+            method: "PUT",
+            body: payload,
+          });
+        } else {
+          await apiFetch("/api/posts", {
+            method: "POST",
+            body: payload,
+          });
+        }
+      } else if (state.supabase) {
+        if (state.editingPost) {
+          const { error } = await state.supabase.from(TABLES.posts).update(payload).eq("id", state.editingPost.id);
+          if (error) throw error;
+        } else {
+          const { error } = await state.supabase.from(TABLES.posts).insert({ ...payload, user_id: state.user?.id });
+          if (error) throw error;
+        }
+      } else {
+        const posts = loadLocalPosts();
+        if (state.editingPost) {
+          saveLocalPosts(
+            posts.map((post) =>
+              post.id === state.editingPost.id ? { ...post, ...payload, updated_at: new Date().toISOString() } : post
+            )
+          );
+        } else {
+          posts.unshift({
+            id: crypto.randomUUID(),
+            ...payload,
+            user_id: localUserId,
+            view_count: 0,
+            created_at: new Date().toISOString(),
+            updated_at: null,
+          });
+          saveLocalPosts(posts);
+        }
+      }
+      els.postEditorDialog.close();
       await loadPosts();
-      const updated = state.posts.find((post) => post.id === state.selectedPost.id);
-      if (updated) openPost(updated);
     } catch (error) {
       setNotice(readableError(error));
     } finally {
@@ -468,16 +968,18 @@
 
   async function deleteSelectedPost() {
     if (!state.selectedPost || !canEditPost(state.selectedPost)) return;
-    const ok = window.confirm("이 글을 삭제할까요?");
-    if (!ok) return;
+    if (!window.confirm("이 글을 삭제할까?")) return;
 
-    setLoading(true, "삭제 중");
+    setLoading(true);
     try {
-      if (state.supabase) {
-        const { error } = await state.supabase.from(TABLE_NAME).delete().eq("id", state.selectedPost.id);
+      if (useProxy()) {
+        await apiFetch(`/api/posts/${encodeURIComponent(state.selectedPost.id)}`, { method: "DELETE" });
+      } else if (state.supabase) {
+        const { error } = await state.supabase.from(TABLES.posts).delete().eq("id", state.selectedPost.id);
         if (error) throw error;
       } else {
         saveLocalPosts(loadLocalPosts().filter((post) => post.id !== state.selectedPost.id));
+        saveLocalComments(loadLocalComments().filter((comment) => comment.post_id !== state.selectedPost.id));
       }
       els.postDialog.close();
       await loadPosts();
@@ -488,130 +990,194 @@
     }
   }
 
-  function renderPosts() {
-    const query = els.searchInput.value.trim().toLowerCase();
-    const category = els.categoryFilter.value;
-    const sort = els.sortSelect.value;
+  async function saveComment(event) {
+    event.preventDefault();
+    if (!state.selectedPost) return;
+    const board = activeBoard();
+    if (!board?.allow_comments) return;
 
-    const filtered = state.posts
-      .filter((post) => category === "all" || post.category === category)
-      .filter((post) => {
-        if (!query) return true;
-        return [post.title, post.content, post.author_name, post.category]
-          .join(" ")
-          .toLowerCase()
-          .includes(query);
-      })
-      .sort((a, b) => {
-        const left = new Date(a.created_at).getTime();
-        const right = new Date(b.created_at).getTime();
-        return sort === "oldest" ? left - right : right - left;
-      });
+    const content = sanitizeText(els.commentContent.value, 1200);
+    if (!content) return;
 
-    els.postList.innerHTML = "";
-    if (!filtered.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = state.activeMode === "blog" ? "아직 블로그 글이 없습니다." : "아직 게시글이 없습니다.";
-      els.postList.append(empty);
-    } else {
-      filtered.forEach((post) => els.postList.append(createPostCard(post)));
+    const payload = {
+      post_id: state.selectedPost.id,
+      author_name: sanitizeText(els.displayName.value, 24) || createGuestName(),
+      content,
+    };
+
+    setLoading(true);
+    try {
+      if (useProxy()) {
+        await apiFetch("/api/comments", {
+          method: "POST",
+          body: payload,
+        });
+      } else if (state.supabase) {
+        const { error } = await state.supabase.from(TABLES.comments).insert({ ...payload, user_id: state.user?.id });
+        if (error) throw error;
+      } else {
+        const comments = loadLocalComments();
+        comments.push({
+          id: crypto.randomUUID(),
+          ...payload,
+          user_id: localUserId,
+          created_at: new Date().toISOString(),
+          updated_at: null,
+        });
+        saveLocalComments(comments);
+      }
+      els.commentContent.value = "";
+      await loadPosts();
+      await loadComments(state.selectedPost.id);
+    } catch (error) {
+      setNotice(readableError(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteComment(commentId) {
+    if (!window.confirm("댓글을 삭제할까?")) return;
+    try {
+      if (useProxy()) {
+        await apiFetch(`/api/comments/${encodeURIComponent(commentId)}`, { method: "DELETE" });
+      } else if (state.supabase) {
+        const { error } = await state.supabase.from(TABLES.comments).delete().eq("id", commentId);
+        if (error) throw error;
+      } else {
+        saveLocalComments(loadLocalComments().filter((comment) => comment.id !== commentId));
+      }
+      await loadPosts();
+      if (state.selectedPost) await loadComments(state.selectedPost.id);
+    } catch (error) {
+      setNotice(readableError(error));
+    }
+  }
+
+  function fillBoardForm(board) {
+    state.editingBoardId = board?.id || null;
+    els.boardSlug.value = board?.slug || "";
+    els.boardSlug.disabled = Boolean(board && state.supabase);
+    els.boardName.value = board?.name || "";
+    els.boardDescription.value = board?.description || "";
+    els.boardType.value = board?.board_type || "board";
+    els.boardWriteRole.value = board?.write_role || "all";
+    els.boardSkin.value = board?.skin || "table";
+    els.boardSortOrder.value = board?.sort_order ?? 100;
+    els.boardAllowComments.checked = board?.allow_comments ?? true;
+    renderBoardAdminList();
+  }
+
+  async function saveBoard(event) {
+    event.preventDefault();
+    if ((state.supabase || useProxy()) && !isOwner()) {
+      setNotice("게시판 관리는 관리자만 가능해.");
+      return;
     }
 
-    els.postCount.textContent = String(filtered.length);
-    renderIcons();
+    const board = {
+      slug: slugify(els.boardSlug.value),
+      name: sanitizeText(els.boardName.value, 40),
+      description: sanitizeText(els.boardDescription.value, 140),
+      board_type: els.boardType.value === "blog" ? "blog" : "board",
+      write_role: els.boardWriteRole.value === "owner" ? "owner" : "all",
+      skin: els.boardSkin.value === "blog" ? "blog" : "table",
+      allow_comments: els.boardAllowComments.checked,
+      sort_order: Number(els.boardSortOrder.value || 100),
+    };
+    if (!board.slug || !board.name) return;
+
+    setLoading(true);
+    try {
+      if (useProxy()) {
+        await apiFetch("/api/boards", {
+          method: "POST",
+          body: state.editingBoardId ? { id: state.editingBoardId, ...board } : board,
+        });
+      } else if (state.supabase) {
+        const payload = state.editingBoardId ? { id: state.editingBoardId, ...board } : board;
+        const { error } = await state.supabase.from(TABLES.boards).upsert(payload, { onConflict: "slug" });
+        if (error) throw error;
+      } else {
+        const boards = loadLocalBoards();
+        if (state.editingBoardId) {
+          saveLocalBoards(boards.map((item) => (item.id === state.editingBoardId ? { ...item, ...board } : item)));
+        } else {
+          saveLocalBoards([...boards, { id: board.slug, ...board }]);
+        }
+      }
+      fillBoardForm(null);
+      await loadBoards();
+      selectInitialBoard();
+      await loadPosts();
+    } catch (error) {
+      setNotice(readableError(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function createPostCard(post) {
-    const card = document.createElement("button");
-    card.className = "post-card";
-    card.type = "button";
-    card.addEventListener("click", () => openPost(post));
-
-    const category = document.createElement("span");
-    category.className = "category-chip";
-    category.textContent = post.category || "일상";
-
-    const title = document.createElement("h3");
-    title.textContent = post.title;
-
-    const body = document.createElement("p");
-    body.textContent = post.content;
-
-    const meta = document.createElement("div");
-    meta.className = "post-meta";
-    meta.innerHTML = `<span>${escapeHtml(post.author_name || "익명")}</span><span>${formatDate(post.created_at)}</span>`;
-
-    card.append(category, title, body, meta);
-    return card;
+  function hydrateSettingsForm() {
+    els.supabaseUrl.value = state.settings.supabaseUrl;
+    els.supabaseKey.value = state.settings.supabaseKey;
+    els.apiBaseUrl.value = state.settings.apiBaseUrl;
+    els.adminToken.value = state.settings.adminToken;
+    els.ownerUserId.value = state.settings.ownerUserId;
+    els.displayName.value = state.settings.displayName || createGuestName();
+    els.siteTitleInput.value = state.settings.siteTitle;
+    els.themeSelect.value = state.settings.theme;
+    els.skinSelect.value = state.settings.skin;
+    els.backgroundUrl.value = state.settings.backgroundUrl;
   }
 
-  function openPost(post) {
-    state.selectedPost = post;
-    state.editMode = false;
-
-    els.dialogCategory.textContent = post.category || "일상";
-    els.dialogTitle.textContent = post.title;
-    els.dialogMeta.textContent = `${post.author_name || "익명"} · ${formatDate(post.created_at)}${
-      post.updated_at ? " · 수정됨" : ""
-    }`;
-    els.dialogContent.textContent = post.content;
-    els.editTitle.value = post.title;
-    els.editCategory.value = post.category || "일상";
-    els.editContent.value = post.content;
-    setDialogEditMode(false);
-    els.postDialog.showModal();
-    renderIcons();
-  }
-
-  function setDialogEditMode(isEditing) {
-    state.editMode = isEditing;
-    const canEdit = canEditPost(state.selectedPost);
-    els.editButton.hidden = isEditing || !canEdit;
-    els.saveEditButton.hidden = !isEditing || !canEdit;
-    els.deleteButton.hidden = !canEdit;
-    els.editArea.hidden = !isEditing;
-    els.dialogContent.hidden = isEditing;
-  }
-
-  function updateModeUi() {
-    els.modeTabs.forEach((button) => {
-      const active = button.dataset.mode === state.activeMode;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", String(active));
+  function readSettingsForm() {
+    return normalizeSettings({
+      apiBaseUrl: els.apiBaseUrl.value,
+      adminToken: els.adminToken.value,
+      supabaseUrl: els.supabaseUrl.value,
+      supabaseKey: els.supabaseKey.value,
+      ownerUserId: els.ownerUserId.value,
+      displayName: els.displayName.value,
+      siteTitle: els.siteTitleInput.value,
+      defaultBoardSlug: els.defaultBoardSelect.value || activeBoard()?.slug,
+      backgroundUrl: els.backgroundUrl.value,
+      theme: els.themeSelect.value,
+      skin: els.skinSelect.value,
     });
-
-    els.composerTitle.textContent = state.activeMode === "blog" ? "새 블로그 글" : "새 게시글";
-    syncFormState();
   }
 
-  function updateSummary() {
-    const name = sanitizeText(els.displayName.value, 24) || "익명";
-    els.memberTag.textContent = name;
-    els.modeTag.textContent = state.supabase ? "Supabase" : "로컬";
+  function applyVisualSettings(settings = state.settings) {
+    const background = settings.backgroundUrl || DEFAULT_BACKGROUND;
+    document.documentElement.style.setProperty("--background-image", `url("${escapeCssUrl(background)}")`);
+    document.body.dataset.theme = settings.theme || "night";
+    document.body.dataset.skin = settings.skin || "forest";
+    els.siteTitle.textContent = settings.siteTitle || "별숲 커뮤니티";
+    document.title = settings.siteTitle || "별숲 커뮤니티";
   }
 
-  function updateCurrentUserLabel() {
-    const id = state.user?.id;
-    els.currentUserLabel.textContent = id ? `${id.slice(0, 8)}...` : "ID 대기";
+  function updateIdentityUi() {
+    const owner = isOwner();
+    els.roleBadge.textContent = owner ? "owner" : "guest";
+    els.roleBadge.classList.toggle("connected", owner);
+    els.currentUserLabel.textContent = useProxy()
+      ? `Proxy guest ${localUserId}`
+      : state.user?.id
+        ? `User ID ${state.user.id}`
+        : `Local ID ${localUserId}`;
   }
 
-  function canCreateActiveMode() {
-    if (state.activeMode === "board") return true;
-    return isOwner();
-  }
-
-  function canEditPost(post) {
-    if (!post) return false;
-    if (!state.supabase) return post.user_id === state.localUserId;
-    if (post.post_type === "blog") return isOwner();
-    return Boolean(state.user?.id && post.user_id === state.user.id);
-  }
-
-  function isOwner() {
-    if (!state.supabase) return true;
-    const ownerId = state.settings.ownerUserId || state.sharedSettings.ownerUserId;
-    return Boolean(ownerId && state.user?.id === ownerId);
+  function setLoading(isLoading) {
+    state.loading = isLoading;
+    [
+      els.refreshButton,
+      els.saveSettingsButton,
+      els.saveSharedSettingsButton,
+      els.submitPostButton,
+      els.submitCommentButton,
+    ].forEach((button) => {
+      if (button) button.disabled = isLoading;
+    });
+    if (els.writePostButton) els.writePostButton.disabled = isLoading || !canWriteBoard(activeBoard());
   }
 
   function setStatus(text, mode) {
@@ -626,54 +1192,45 @@
     els.notice.textContent = message || "";
   }
 
-  function setLoading(isLoading, label) {
-    state.loading = isLoading;
-    const buttons = [
-      els.refreshButton,
-      els.saveSettingsButton,
-      els.saveSharedSettingsButton,
-      els.clearSettingsButton,
-      els.useCurrentUserButton,
-      els.editButton,
-      els.saveEditButton,
-      els.deleteButton,
-    ];
-    buttons.forEach((button) => {
-      if (button) button.disabled = isLoading;
-    });
-    syncFormState(label);
+  function activeBoard() {
+    return state.boards.find((board) => board.id === state.selectedBoardId) || state.boards[0] || null;
   }
 
-  function syncFormState(label) {
-    const allowed = canCreateActiveMode();
-    Array.from(els.postForm.elements).forEach((control) => {
-      control.disabled = state.loading || !allowed;
-    });
-    els.composerPanel.classList.toggle("readonly", !allowed);
-    els.draftState.textContent = state.loading ? label || "처리 중" : allowed ? "대기" : "읽기 전용";
+  function canWriteBoard(board) {
+    if (!board) return false;
+    if (useProxy()) return board.write_role === "all" || isOwner();
+    if (!state.supabase) return true;
+    return board.write_role === "all" || isOwner();
   }
 
-  function readSettingsForm() {
-    return normalizeSettings({
-      supabaseUrl: els.supabaseUrl.value,
-      supabaseKey: els.supabaseKey.value,
-      displayName: els.displayName.value,
-      defaultMode: els.defaultModeSelect.value,
-      ownerUserId: els.ownerUserId.value,
-      backgroundUrl: els.backgroundUrl.value,
-      theme: els.themeSelect.value,
-      siteTitle: els.siteTitleInput.value,
-    });
+  function canEditPost(post) {
+    if (!post) return false;
+    if (useProxy()) return Boolean(post.can_edit || isOwner());
+    if (!state.supabase) return post.user_id === localUserId || isOwner();
+    return post.user_id === state.user?.id || isOwner();
+  }
+
+  function canEditComment(comment) {
+    if (!comment) return false;
+    if (useProxy()) return Boolean(comment.can_edit || isOwner());
+    if (!state.supabase) return comment.user_id === localUserId || isOwner();
+    return comment.user_id === state.user?.id || isOwner();
+  }
+
+  function isOwner() {
+    if (useProxy()) return Boolean(state.settings.adminToken);
+    if (!state.supabase) return true;
+    return Boolean(state.settings.ownerUserId && state.user?.id === state.settings.ownerUserId);
   }
 
   function loadSettings() {
     return normalizeSettings({
       ...runtimeConfig,
-      ...getLocalOverrides(),
+      ...loadLocalSettings(),
     });
   }
 
-  function getLocalOverrides() {
+  function loadLocalSettings() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
     } catch {
@@ -681,25 +1238,38 @@
     }
   }
 
+  function persistSettings() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.settings));
+  }
+
   function normalizeSettings(value) {
     return {
+      apiBaseUrl: String(value.apiBaseUrl || "").trim(),
+      adminToken: String(value.adminToken || "").trim(),
       supabaseUrl: String(value.supabaseUrl || "").trim(),
       supabaseKey: String(value.supabaseKey || "").trim(),
-      displayName: sanitizeText(value.displayName || "", 24),
-      defaultMode: sanitizeMode(value.defaultMode || "board"),
       ownerUserId: String(value.ownerUserId || "").trim(),
+      displayName: sanitizeText(value.displayName || "", 24),
+      defaultBoardSlug: String(value.defaultBoardSlug || value.defaultMode || "free").trim() || "free",
       backgroundUrl: String(value.backgroundUrl || "").trim(),
-      theme: value.theme === "dawn" ? "dawn" : "night",
-      siteTitle: sanitizeText(value.siteTitle || "별숲 블로그 보드", 32),
+      siteTitle: sanitizeText(value.siteTitle || "별숲 커뮤니티", 32),
+      theme: ["night", "dawn", "classic"].includes(value.theme) ? value.theme : "night",
+      skin: value.skin === "classic" ? "classic" : "forest",
     };
   }
 
-  function applyVisualSettings(settings = state.settings) {
-    const background = settings.backgroundUrl || DEFAULT_BACKGROUND;
-    document.body.dataset.theme = settings.theme;
-    document.documentElement.style.setProperty("--background-image", `url("${escapeCssUrl(background)}")`);
-    els.siteTitle.textContent = settings.siteTitle || "별숲 블로그 보드";
-    document.title = settings.siteTitle || "별숲 블로그 보드";
+  function loadLocalBoards() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LOCAL_BOARDS_KEY));
+      if (Array.isArray(saved) && saved.length) return saved;
+    } catch {
+      return defaultBoards.slice();
+    }
+    return defaultBoards.slice();
+  }
+
+  function saveLocalBoards(boards) {
+    localStorage.setItem(LOCAL_BOARDS_KEY, JSON.stringify(boards));
   }
 
   function loadLocalPosts() {
@@ -707,13 +1277,27 @@
       const saved = JSON.parse(localStorage.getItem(LOCAL_POSTS_KEY));
       if (Array.isArray(saved)) return saved;
     } catch {
-      return fallbackPosts;
+      return samplePosts.slice();
     }
-    return fallbackPosts;
+    return samplePosts.slice();
   }
 
   function saveLocalPosts(posts) {
     localStorage.setItem(LOCAL_POSTS_KEY, JSON.stringify(posts));
+  }
+
+  function loadLocalComments() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LOCAL_COMMENTS_KEY));
+      if (Array.isArray(saved)) return saved;
+    } catch {
+      return sampleComments.slice();
+    }
+    return sampleComments.slice();
+  }
+
+  function saveLocalComments(comments) {
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(comments));
   }
 
   function getLocalUserId() {
@@ -729,10 +1313,6 @@
     return `별숲손님${localUserId.slice(0, 4)}`;
   }
 
-  function sanitizeMode(value) {
-    return value === "blog" ? "blog" : "board";
-  }
-
   function sanitizeText(value, maxLength) {
     return String(value || "")
       .replace(/\s+\n/g, "\n")
@@ -741,8 +1321,17 @@
       .slice(0, maxLength);
   }
 
+  function slugify(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32);
+  }
+
   function escapeHtml(value) {
-    return String(value)
+    return String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
@@ -756,8 +1345,8 @@
 
   function formatDate(value) {
     return new Intl.DateTimeFormat("ko-KR", {
-      month: "short",
-      day: "numeric",
+      month: "2-digit",
+      day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));
@@ -765,20 +1354,14 @@
 
   function readableError(error) {
     const message = error?.message || String(error);
-    if (message.includes("relation") && message.includes(TABLE_NAME)) {
-      return "Supabase 테이블이 아직 없습니다. supabase-schema.sql을 SQL Editor에서 실행하세요.";
-    }
-    if (message.includes("post_type")) {
-      return "post_type 컬럼이 필요합니다. 최신 supabase-schema.sql을 다시 확인하세요.";
-    }
-    if (message.includes(SETTINGS_TABLE)) {
-      return "공유 설정 테이블이 없습니다. supabase-schema.sql의 forest_site_settings를 확인하세요.";
+    if (message.includes("relation") || message.includes("does not exist")) {
+      return "Supabase 테이블이 아직 맞지 않아. install.html의 SQL을 다시 실행해줘.";
     }
     if (message.toLowerCase().includes("anonymous")) {
-      return "Supabase Auth에서 Anonymous sign-ins를 켜야 합니다.";
+      return "Supabase Auth에서 Anonymous sign-ins를 켜야 해.";
     }
-    if (message.includes("violates row-level security")) {
-      return "RLS 정책이 요청을 막았습니다. Supabase에서 게시판/블로그 권한 정책을 확인하세요.";
+    if (message.includes("row-level security")) {
+      return "RLS 정책이 막았어. 관리자 User ID나 게시판 쓰기 권한을 확인해줘.";
     }
     return message;
   }

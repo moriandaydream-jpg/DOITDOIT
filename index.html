@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>별숲 블로그 보드</title>
+    <title>별숲 커뮤니티</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,12 +12,12 @@
   </head>
   <body>
     <div class="app-shell">
-      <header class="topbar">
-        <div>
+      <header class="site-header">
+        <div class="brand-block">
           <p class="eyebrow">Shooting Star Forest</p>
-          <h1 id="siteTitle">별숲 블로그 보드</h1>
+          <h1 id="siteTitle">별숲 커뮤니티</h1>
         </div>
-        <div class="topbar-actions">
+        <div class="top-actions">
           <span id="connectionBadge" class="status-pill">준비 중</span>
           <a class="icon-button" href="./install.html" title="설치">
             <i data-lucide="wrench"></i>
@@ -27,76 +27,110 @@
             <i data-lucide="refresh-cw"></i>
             <span>새로고침</span>
           </button>
-          <button id="settingsButton" class="icon-button" type="button" title="설정">
+          <button id="adminToggleButton" class="icon-button" type="button" title="관리">
             <i data-lucide="settings"></i>
-            <span>설정</span>
+            <span>관리</span>
           </button>
         </div>
       </header>
 
-      <main class="workspace">
-        <aside class="sidebar">
-          <section class="panel setup-panel" id="setupPanel">
+      <main class="cms-layout">
+        <aside class="left-rail">
+          <section class="panel user-panel">
             <div class="panel-heading">
-              <h2>설정</h2>
-              <button id="closeSettingsButton" class="ghost-icon" type="button" title="닫기">
+              <h2>방문자</h2>
+              <span id="roleBadge" class="small-muted">guest</span>
+            </div>
+            <label>
+              표시 이름
+              <input id="displayName" maxlength="24" placeholder="별숲 손님" />
+            </label>
+            <button id="saveNameButton" class="secondary-button full-button" type="button">
+              <i data-lucide="badge-check"></i>
+              <span>이름 저장</span>
+            </button>
+            <p id="currentUserLabel" class="tiny-note">User ID 대기</p>
+          </section>
+
+          <section class="panel board-menu">
+            <div class="panel-heading">
+              <h2>게시판</h2>
+              <span id="boardCountLabel" class="small-muted">0</span>
+            </div>
+            <nav id="boardNav" class="board-nav" aria-label="게시판 목록"></nav>
+          </section>
+
+          <section id="adminPanel" class="panel admin-panel" hidden>
+            <div class="panel-heading">
+              <h2>관리자</h2>
+              <button id="closeAdminButton" class="ghost-icon" type="button" title="닫기">
                 <i data-lucide="x"></i>
               </button>
             </div>
+
             <label>
-              프로젝트 URL
+              Supabase URL
               <input id="supabaseUrl" autocomplete="off" spellcheck="false" placeholder="https://xxxx.supabase.co" />
             </label>
             <label>
               Publishable / anon key
               <input id="supabaseKey" autocomplete="off" spellcheck="false" placeholder="sb_publishable_..." />
             </label>
-            <div class="settings-grid">
-              <label>
-                표시 이름
-                <input id="displayName" maxlength="24" placeholder="별숲 손님" />
-              </label>
-              <label>
-                기본 모드
-                <select id="defaultModeSelect">
-                  <option value="board">게시판</option>
-                  <option value="blog">블로그</option>
-                </select>
-              </label>
-            </div>
+            <label>
+              프록시 API URL
+              <input id="apiBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://your-worker.workers.dev" />
+            </label>
+            <label>
+              관리자 토큰
+              <input id="adminToken" autocomplete="off" spellcheck="false" type="password" placeholder="내 브라우저에만 저장" />
+            </label>
             <label>
               관리자 User ID
-              <input id="ownerUserId" autocomplete="off" spellcheck="false" placeholder="Supabase auth.users id" />
+              <input id="ownerUserId" autocomplete="off" spellcheck="false" placeholder="연결 후 내 ID로 지정" />
             </label>
             <div class="button-row compact-row">
               <button id="useCurrentUserButton" class="secondary-button" type="button">
-                <i data-lucide="badge-check"></i>
-                <span>내 ID로 지정</span>
+                <i data-lucide="fingerprint"></i>
+                <span>내 ID 사용</span>
               </button>
-              <span id="currentUserLabel" class="small-muted">ID 대기</span>
+            <button id="saveSettingsButton" class="primary-button" type="button">
+              <i data-lucide="save"></i>
+              <span>저장</span>
+            </button>
+            </div>
+
+            <div class="settings-grid">
+              <label>
+                사이트 제목
+                <input id="siteTitleInput" maxlength="32" placeholder="별숲 커뮤니티" />
+              </label>
+              <label>
+                기본 게시판
+                <select id="defaultBoardSelect"></select>
+              </label>
+            </div>
+            <div class="settings-grid">
+              <label>
+                테마
+                <select id="themeSelect">
+                  <option value="night">별숲</option>
+                  <option value="dawn">새벽</option>
+                  <option value="classic">클래식</option>
+                </select>
+              </label>
+              <label>
+                스킨
+                <select id="skinSelect">
+                  <option value="forest">숲</option>
+                  <option value="classic">그누 느낌</option>
+                </select>
+              </label>
             </div>
             <label>
               배경 이미지 URL
               <input id="backgroundUrl" autocomplete="off" spellcheck="false" placeholder="./assets/shooting-star-forest.png" />
             </label>
-            <div class="settings-grid">
-              <label>
-                테마
-                <select id="themeSelect">
-                  <option value="night">한밤</option>
-                  <option value="dawn">새벽</option>
-                </select>
-              </label>
-              <label>
-                제목
-                <input id="siteTitleInput" maxlength="32" placeholder="별숲 블로그 보드" />
-              </label>
-            </div>
             <div class="button-row">
-              <button id="saveSettingsButton" class="primary-button" type="button">
-                <i data-lucide="save"></i>
-                <span>저장</span>
-              </button>
               <button id="saveSharedSettingsButton" class="secondary-button" type="button">
                 <i data-lucide="cloud-upload"></i>
                 <span>공유 설정 저장</span>
@@ -106,141 +140,213 @@
                 <span>초기화</span>
               </button>
             </div>
-            <a class="sql-link" href="./supabase-schema.sql" target="_blank" rel="noreferrer">
-              <i data-lucide="database"></i>
-              <span>테이블 SQL</span>
-            </a>
-          </section>
 
-          <section class="panel composer-panel" id="composerPanel">
+            <div class="admin-divider"></div>
             <div class="panel-heading">
-              <h2 id="composerTitle">새 게시글</h2>
-              <span id="draftState" class="small-muted">대기</span>
+              <h2>게시판 관리</h2>
+              <button id="newBoardButton" class="ghost-icon" type="button" title="새 게시판">
+                <i data-lucide="plus"></i>
+              </button>
             </div>
-            <form id="postForm">
+            <div id="boardAdminList" class="admin-board-list"></div>
+            <form id="boardForm" class="board-form">
+              <div class="settings-grid">
+                <label>
+                  슬러그
+                  <input id="boardSlug" maxlength="32" placeholder="free" pattern="[a-z0-9_-]+" />
+                </label>
+                <label>
+                  이름
+                  <input id="boardName" maxlength="40" placeholder="자유게시판" />
+                </label>
+              </div>
               <label>
-                제목
-                <input id="postTitle" maxlength="80" required placeholder="오늘의 별빛 기록" />
+                설명
+                <input id="boardDescription" maxlength="140" placeholder="게시판 설명" />
               </label>
-              <label>
-                분류
-                <select id="postCategory">
-                  <option value="일상">일상</option>
-                  <option value="질문">질문</option>
-                  <option value="공유">공유</option>
-                  <option value="공지">공지</option>
-                </select>
-              </label>
-              <label>
-                내용
-                <textarea id="postContent" rows="8" required placeholder="숲길에 남길 이야기를 적어주세요."></textarea>
-              </label>
-              <button id="submitPostButton" class="primary-button full-button" type="submit">
-                <i data-lucide="send"></i>
-                <span>게시</span>
+              <div class="settings-grid three-col">
+                <label>
+                  유형
+                  <select id="boardType">
+                    <option value="board">게시판</option>
+                    <option value="blog">블로그</option>
+                  </select>
+                </label>
+                <label>
+                  쓰기
+                  <select id="boardWriteRole">
+                    <option value="all">모두</option>
+                    <option value="owner">관리자</option>
+                  </select>
+                </label>
+                <label>
+                  목록
+                  <select id="boardSkin">
+                    <option value="table">테이블</option>
+                    <option value="blog">블로그</option>
+                  </select>
+                </label>
+              </div>
+              <div class="settings-grid">
+                <label>
+                  정렬
+                  <input id="boardSortOrder" type="number" min="0" step="10" value="100" />
+                </label>
+                <label class="check-label">
+                  <input id="boardAllowComments" type="checkbox" checked />
+                  댓글 허용
+                </label>
+              </div>
+              <button class="primary-button full-button" type="submit">
+                <i data-lucide="layout-list"></i>
+                <span>게시판 저장</span>
               </button>
             </form>
           </section>
         </aside>
 
-        <section class="board-area">
-          <div class="mode-tabs" role="tablist" aria-label="보기 모드">
-            <button class="mode-tab active" type="button" data-mode="board">
-              <i data-lucide="messages-square"></i>
-              <span>게시판</span>
-            </button>
-            <button class="mode-tab" type="button" data-mode="blog">
-              <i data-lucide="book-open-text"></i>
-              <span>블로그</span>
-            </button>
+        <section class="content-panel">
+          <div class="board-head">
+            <div>
+              <p id="boardPath" class="board-path">홈 / 자유게시판</p>
+              <h2 id="activeBoardName">자유게시판</h2>
+              <p id="activeBoardDescription" class="board-description">방문자들이 함께 쓰는 열린 게시판</p>
+            </div>
+            <div class="board-actions">
+              <span id="writePolicyBadge" class="status-pill">쓰기 가능</span>
+              <button id="writePostButton" class="primary-button" type="button">
+                <i data-lucide="square-pen"></i>
+                <span>글쓰기</span>
+              </button>
+            </div>
           </div>
 
-          <div class="board-toolbar">
+          <div class="toolbar">
             <div class="search-wrap">
               <i data-lucide="search"></i>
-              <input id="searchInput" placeholder="검색" />
+              <input id="searchInput" placeholder="제목, 내용, 작성자 검색" />
             </div>
             <select id="categoryFilter" title="분류">
               <option value="all">전체</option>
-              <option value="일상">일상</option>
-              <option value="질문">질문</option>
-              <option value="공유">공유</option>
+              <option value="일반">일반</option>
               <option value="공지">공지</option>
+              <option value="질문">질문</option>
+              <option value="정보">정보</option>
+              <option value="잡담">잡담</option>
             </select>
             <select id="sortSelect" title="정렬">
               <option value="newest">최신순</option>
               <option value="oldest">오래된순</option>
+              <option value="views">조회순</option>
             </select>
           </div>
 
-          <div class="stats-strip">
+          <div class="summary-strip">
             <div>
               <strong id="postCount">0</strong>
               <span>글</span>
             </div>
             <div>
-              <strong id="memberTag">익명</strong>
-              <span>방문자</span>
+              <strong id="commentCount">0</strong>
+              <span>댓글</span>
             </div>
             <div>
-              <strong id="modeTag">로컬</strong>
+              <strong id="storageMode">로컬</strong>
               <span>저장소</span>
             </div>
           </div>
 
           <div id="notice" class="notice" hidden></div>
-          <div id="postList" class="post-list" aria-live="polite"></div>
+          <div id="postList" class="post-list-shell"></div>
         </section>
       </main>
     </div>
 
-    <dialog id="postDialog" class="post-dialog">
-      <form method="dialog" class="dialog-frame">
+    <dialog id="postEditorDialog" class="app-dialog">
+      <div class="dialog-frame">
         <div class="dialog-heading">
           <div>
-            <span id="dialogCategory" class="category-chip">일상</span>
+            <span id="editorBoardLabel" class="category-chip">자유게시판</span>
+            <h2 id="editorTitle">글쓰기</h2>
+          </div>
+          <button id="closeEditorButton" class="ghost-icon" type="button" title="닫기">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <form id="postForm" class="editor-form">
+          <div class="settings-grid">
+            <label>
+              제목
+              <input id="postTitle" maxlength="100" required placeholder="제목을 입력해줘" />
+            </label>
+            <label>
+              분류
+              <select id="postCategory">
+                <option value="일반">일반</option>
+                <option value="공지">공지</option>
+                <option value="질문">질문</option>
+                <option value="정보">정보</option>
+                <option value="잡담">잡담</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            내용
+            <textarea id="postContent" rows="13" required placeholder="내용을 입력해줘"></textarea>
+          </label>
+          <label class="check-label">
+            <input id="postIsNotice" type="checkbox" />
+            공지로 고정
+          </label>
+          <div class="dialog-actions">
+            <button id="submitPostButton" class="primary-button" type="submit">
+              <i data-lucide="send"></i>
+              <span>저장</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="postDialog" class="app-dialog wide-dialog">
+      <div class="dialog-frame">
+        <div class="dialog-heading">
+          <div>
+            <span id="dialogCategory" class="category-chip">일반</span>
             <h2 id="dialogTitle"></h2>
           </div>
-          <button class="ghost-icon" value="close" title="닫기">
+          <button id="closePostButton" class="ghost-icon" type="button" title="닫기">
             <i data-lucide="x"></i>
           </button>
         </div>
         <p id="dialogMeta" class="dialog-meta"></p>
         <article id="dialogContent" class="dialog-content"></article>
-        <div id="editArea" class="edit-area" hidden>
-          <label>
-            제목
-            <input id="editTitle" maxlength="80" />
-          </label>
-          <label>
-            분류
-            <select id="editCategory">
-              <option value="일상">일상</option>
-              <option value="질문">질문</option>
-              <option value="공유">공유</option>
-              <option value="공지">공지</option>
-            </select>
-          </label>
-          <label>
-            내용
-            <textarea id="editContent" rows="9"></textarea>
-          </label>
-        </div>
         <div class="dialog-actions">
-          <button id="editButton" class="secondary-button" type="button">
+          <button id="editPostButton" class="secondary-button" type="button">
             <i data-lucide="pencil"></i>
             <span>수정</span>
           </button>
-          <button id="saveEditButton" class="primary-button" type="button" hidden>
-            <i data-lucide="save"></i>
-            <span>저장</span>
-          </button>
-          <button id="deleteButton" class="danger-button" type="button">
+          <button id="deletePostButton" class="danger-button" type="button">
             <i data-lucide="trash-2"></i>
             <span>삭제</span>
           </button>
         </div>
-      </form>
+
+        <section class="comments-section">
+          <div class="panel-heading">
+            <h2>댓글</h2>
+            <span id="dialogCommentCount" class="small-muted">0</span>
+          </div>
+          <div id="commentList" class="comment-list"></div>
+          <form id="commentForm" class="comment-form">
+            <textarea id="commentContent" rows="3" maxlength="1200" placeholder="댓글을 입력해줘"></textarea>
+            <button id="submitCommentButton" class="primary-button" type="submit">
+              <i data-lucide="message-circle-plus"></i>
+              <span>댓글 등록</span>
+            </button>
+          </form>
+        </section>
+      </div>
     </dialog>
 
     <script src="./app.js"></script>
