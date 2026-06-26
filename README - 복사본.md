@@ -38,12 +38,11 @@ GitHub Pages 같은 정적 호스팅에 올릴 수 있는 Supabase 기반 게시
 
 1. Supabase Dashboard > Authentication > Providers로 갑니다.
 2. Kakao Provider를 켭니다.
-3. Client ID에는 Kakao Developers의 `REST API 키`를 넣고, 활성화한 Client Secret을 입력합니다.
-4. 이메일 동의를 사용하지 않거나 카카오 앱이 비즈 앱이 아니라면 `Allow users without an email`을 켭니다.
-5. `config.js`의 `oauthRedirectUrl`에 실제 배포 주소를 넣습니다. GitHub Pages라면 `https://계정.github.io/저장소/`처럼 마지막 `/`까지 포함합니다.
-6. Authentication > URL Configuration에서 Site URL과 Redirect URLs에 같은 주소를 정확히 넣습니다.
-7. Kakao Developers의 Redirect URI에는 Supabase Dashboard에 표시된 `https://<project-ref>.supabase.co/auth/v1/callback`을 넣습니다.
-8. 사이트에서 카카오 로그인 후 관리자 페이지의 `내 ID 사용`을 누르고 `공유 설정 저장`을 누릅니다.
+3. Kakao Client ID / Secret을 입력합니다.
+4. `config.js`의 `oauthRedirectUrl`에 실제 배포 주소를 넣습니다. GitHub Pages라면 `https://계정.github.io/저장소/`처럼 마지막 `/`까지 포함합니다.
+5. Authentication > URL Configuration에서 Site URL과 Redirect URLs에 같은 주소를 정확히 넣습니다.
+6. Kakao Developers의 Redirect URI에는 Supabase Dashboard에 표시된 `https://<project-ref>.supabase.co/auth/v1/callback`을 넣습니다.
+7. 사이트에서 카카오 로그인 후 관리자 페이지의 `내 ID 사용`을 누르고 `공유 설정 저장`을 누릅니다.
 
 이후 `owner_user_id`가 소셜 로그인 계정의 User ID로 고정돼서, 익명 로그인처럼 도메인마다 ID가 달라지는 문제가 줄어듭니다.
 
@@ -55,7 +54,6 @@ GitHub Pages 같은 정적 호스팅에 올릴 수 있는 Supabase 기반 게시
 
 1. Supabase SQL Editor에서 `supabase-schema.sql`을 실행합니다.
 2. Supabase Edge Function `supabase/functions/forest-proxy`를 배포합니다.
-   `supabase functions deploy forest-proxy --no-verify-jwt --project-ref YOUR_PROJECT_REF`를 사용하면 손님 요청이 `인증 헤더 누락`으로 차단되지 않습니다.
 3. 함수 시크릿에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`를 넣습니다. `ADMIN_TOKEN`은 비상 관리자 토큰으로 선택입니다. 필요하면 `CORS_ORIGIN`도 넣습니다.
 4. Supabase Authentication > Providers에서 Kakao를 켜고, Kakao Developers에도 Supabase가 안내하는 callback URL을 등록합니다.
 5. `install.html`에서 프록시 API URL, Supabase URL, publishable/anon key를 입력하고 `config.js`를 생성합니다. API URL은 `https://<project-ref>.supabase.co/functions/v1/forest-proxy` 형태입니다.
@@ -70,7 +68,6 @@ GitHub Pages 같은 정적 호스팅에 올릴 수 있는 Supabase 기반 게시
 - 블로그/공지 전용 게시판: `write_role = owner`
 - 실제 제한은 Supabase RLS 정책에서 처리합니다.
 - 프록시 모드에서는 Edge Function이 Supabase Auth access token을 확인해서 오너/작성자 권한을 처리합니다. `ADMIN_TOKEN`은 선택적인 비상 우회키입니다.
-- `인증 헤더 누락` 401 오류는 대개 Edge Function의 기본 JWT 검사가 켜진 상태입니다. `supabase/config.toml`의 `verify_jwt = false`를 적용하거나 `--no-verify-jwt` 옵션으로 다시 배포합니다.
 
 ## RLS가 막을 때
 

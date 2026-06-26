@@ -154,6 +154,7 @@
             </div>
             <ul class="help-list">
               <li>DB 비밀키를 숨기려면 Supabase Edge Function 프록시를 쓰고 `config.js`에는 `apiBaseUrl`을 넣어.</li>
+              <li>`인증 헤더 누락`이 나오면 `supabase functions deploy forest-proxy --no-verify-jwt`로 함수를 다시 배포해.</li>
               <li>카카오 로그인까지 쓰려면 Supabase URL과 publishable key도 Auth 전용으로 같이 넣어.</li>
               <li>SQL 실행 후 `공유 설정 저장`을 누르면 Supabase에 관리자 ID와 기본 설정이 들어가.</li>
               <li>직접 연결 모드의 새 설치는 관리자 ID를 비워 두고 저장해. 메인 게시판에서 처음 카카오 로그인한 계정이 관리자로 등록돼.</li>
@@ -169,6 +170,8 @@
             <ul class="help-list">
               <li>직접 연결 모드와 프록시 모드 모두 카카오 로그인을 쓸 수 있어.</li>
               <li>Supabase Dashboard > Authentication > Providers에서 Kakao Provider를 켜.</li>
+              <li>카카오 이메일 동의를 쓰지 않으면 Kakao Provider의 `Allow users without an email`을 반드시 켜.</li>
+              <li>Client ID에는 Kakao Developers의 JavaScript 키가 아니라 `REST API 키`를 넣어.</li>
               <li>Supabase URL Configuration의 Site URL과 Redirect URLs에 위 `로그인 후 돌아올 주소`를 똑같이 넣어.</li>
               <li>Kakao Developers의 Redirect URI에는 사이트 주소가 아니라 Supabase의 `https://프로젝트.supabase.co/auth/v1/callback`을 넣어.</li>
               <li>카카오 로그인은 관리자 전용이며, 관리자 User ID와 다른 계정은 손님으로 돌아가.</li>
@@ -179,6 +182,6 @@
       </main>
     </div>
 
-    <script src="./install.js?v=20260627-3"></script>
+    <script src="./install.js?v=20260627-5"></script>
   </body>
 </html>
