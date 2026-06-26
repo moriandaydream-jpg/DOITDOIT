@@ -72,6 +72,9 @@
       els.skin,
       els.backgroundUrl,
     ].forEach((input) => input.addEventListener("input", generateConfig));
+    els.apiBaseUrl.addEventListener("input", () => {
+      els.saveSharedButton.disabled = false;
+    });
   }
 
   async function loadSchema() {
@@ -88,13 +91,14 @@
 
   async function testConnection() {
     if (els.apiBaseUrl.value.trim()) {
+      els.saveSharedButton.disabled = false;
       setStatus("프록시 확인 중", "");
       try {
+        const headers = { "x-forest-client-id": "installer" };
+        const authorization = await getProxyAuthorization();
+        if (authorization) headers.authorization = authorization;
         const response = await fetch(`${els.apiBaseUrl.value.trim().replace(/\/+$/, "")}/api/settings`, {
-          headers: {
-            "x-forest-client-id": "installer",
-            authorization: els.adminToken.value.trim() ? `Bearer ${els.adminToken.value.trim()}` : "",
-          },
+          headers,
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || response.statusText);
@@ -145,11 +149,13 @@
       setStatus("프록시 저장 중", "");
       try {
         const settings = readSettings(true);
+        const authorization = await getProxyAuthorization();
+        if (!authorization) throw new Error("프록시 설정 저장에는 관리자 토큰 또는 카카오 관리자 로그인이 필요해.");
         const response = await fetch(`${els.apiBaseUrl.value.trim().replace(/\/+$/, "")}/api/settings`, {
           method: "PUT",
           headers: {
             "content-type": "application/json",
-            authorization: `Bearer ${els.adminToken.value.trim()}`,
+            authorization,
           },
           body: JSON.stringify({
             site_title: settings.siteTitle,
@@ -279,6 +285,15 @@
     return url.href;
   }
 
+  async function getProxyAuthorization() {
+    const adminToken = els.adminToken.value.trim();
+    if (adminToken) return `Bearer ${adminToken}`;
+    if (!els.supabaseUrl.value.trim() || !els.supabaseKey.value.trim() || !window.supabase?.createClient) return "";
+    const client = window.supabase.createClient(els.supabaseUrl.value.trim(), els.supabaseKey.value.trim());
+    const { data } = await client.auth.getSession();
+    return data.session?.access_token ? `Bearer ${data.session.access_token}` : "";
+  }
+
   async function copyText(value, message) {
     try {
       await navigator.clipboard.writeText(value);
@@ -306,6 +321,9 @@
     }
     if (message.toLowerCase().includes("row-level security")) {
       return "기존 관리자와 현재 사용자가 달라서 RLS가 저장을 막았어. 메인 게시판에서 카카오 관리자 로그인 후 관리 페이지를 사용해줘.";
+    }
+    if (message.toLowerCase().includes("authorization header") || message.includes("인증 헤더")) {
+      return "Edge Function JWT 검사가 켜져 있어. forest-proxy를 --no-verify-jwt 옵션으로 다시 배포해줘.";
     }
     return message;
   }

@@ -79,6 +79,21 @@ as $$
   );
 $$;
 
+create or replace function public.forest_is_registered_user()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from auth.users
+    where id = auth.uid()
+      and coalesce(is_anonymous, false) = false
+  );
+$$;
+
 alter table public.forest_posts alter column user_id drop not null;
 alter table public.forest_posts add column if not exists client_key text not null default '';
 alter table public.forest_comments alter column user_id drop not null;
@@ -95,6 +110,11 @@ as $$
   where id = post_uuid;
 $$;
 
+revoke all on function public.forest_is_owner() from public;
+revoke all on function public.forest_is_registered_user() from public;
+revoke all on function public.increment_forest_post_view(uuid) from public;
+grant execute on function public.forest_is_owner() to authenticated;
+grant execute on function public.forest_is_registered_user() to authenticated;
 grant execute on function public.increment_forest_post_view(uuid) to authenticated;
 
 alter table public.forest_site_settings enable row level security;
@@ -130,7 +150,10 @@ for insert
 to authenticated
 with check (
   id = 'main'
-  and (owner_user_id is null or owner_user_id = auth.uid())
+  and (
+    owner_user_id is null
+    or (owner_user_id = auth.uid() and public.forest_is_registered_user())
+  )
 );
 
 create policy "site settings can be claimed or edited by owner"
@@ -138,7 +161,11 @@ on public.forest_site_settings
 for update
 to authenticated
 using (owner_user_id is null or public.forest_is_owner())
-with check (owner_user_id is null or owner_user_id = auth.uid() or public.forest_is_owner());
+with check (
+  owner_user_id is null
+  or public.forest_is_owner()
+  or (owner_user_id = auth.uid() and public.forest_is_registered_user())
+);
 
 create policy "boards are readable"
 on public.forest_boards

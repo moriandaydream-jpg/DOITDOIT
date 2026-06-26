@@ -4,6 +4,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $targets = @(
   "install.html",
   "install.js",
+  "remove-installer.js",
   "remove-installer.ps1"
 )
 

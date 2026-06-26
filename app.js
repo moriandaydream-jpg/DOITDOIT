@@ -14,7 +14,8 @@
   };
 
   const localUserId = getLocalUserId();
-  const runtimeConfig = normalizeSettings(window.FOREST_BLOG_CONFIG || {});
+  const rawRuntimeConfig = window.FOREST_BLOG_CONFIG || {};
+  const runtimeConfig = normalizeSettings(rawRuntimeConfig);
 
   const defaultBoards = [
     {
@@ -131,12 +132,14 @@
     editingPost: null,
     editingBoardId: null,
     subscription: null,
+    authSubscription: null,
     loading: false,
   };
 
   const els = {
     siteTitle: document.getElementById("siteTitle"),
     connectionBadge: document.getElementById("connectionBadge"),
+    installLink: document.getElementById("installLink"),
     refreshButton: document.getElementById("refreshButton"),
     adminToggleButton: document.getElementById("adminToggleButton"),
     adminToggleLabel: document.getElementById("adminToggleLabel"),
@@ -382,10 +385,10 @@
       "x-forest-client-id": localUserId,
       ...(options.headers || {}),
     };
-    if (state.authSession?.access_token) {
-      headers.authorization = `Bearer ${state.authSession.access_token}`;
-    } else if (state.settings.adminToken) {
+    if (state.settings.adminToken) {
       headers.authorization = `Bearer ${state.settings.adminToken}`;
+    } else if (state.authSession?.access_token) {
+      headers.authorization = `Bearer ${state.authSession.access_token}`;
     }
 
     const response = await fetch(`${baseUrl}${path}`, {
@@ -394,7 +397,14 @@
       body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
     });
     const text = await response.text();
-    const data = text ? JSON.parse(text) : null;
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
+    }
     if (!response.ok) {
       throw new Error(data?.error || data?.message || response.statusText);
     }
@@ -402,6 +412,7 @@
   }
 
   async function connectIfConfigured(forceNotice) {
+    clearSubscriptions();
     if (useProxy()) {
       const { supabaseUrl, supabaseKey } = state.settings;
       state.supabase = supabaseUrl && supabaseKey && window.supabase?.createClient
@@ -416,12 +427,13 @@
           const { data: userData } = await state.supabase.auth.getUser();
           state.user = userData.user || null;
         }
-        state.supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: authListener } = state.supabase.auth.onAuthStateChange((_event, session) => {
           state.authSession = session || null;
           state.user = session?.user || null;
           updateIdentityUi();
           renderBoardHeader();
         });
+        state.authSubscription = authListener.subscription;
       }
       try {
         await loadSharedSettings();
@@ -480,6 +492,15 @@
     }
   }
 
+  function clearSubscriptions() {
+    state.authSubscription?.unsubscribe();
+    state.authSubscription = null;
+    if (state.subscription && state.supabase?.removeChannel) {
+      state.supabase.removeChannel(state.subscription);
+    }
+    state.subscription = null;
+  }
+
   async function loadSharedSettings() {
     if (useProxy()) {
       const data = await apiFetch("/api/settings");
@@ -493,15 +514,14 @@
         theme: settings.theme || "",
         skin: settings.skin || "",
       };
-      const local = loadLocalSettings();
       state.settings = normalizeSettings({
         ...state.settings,
-        siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
+        siteTitle: state.sharedSettings.siteTitle,
         ownerUserId: state.sharedSettings.ownerUserId,
-        defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
-        backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
-        theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
-        skin: local.skin ? state.settings.skin : state.sharedSettings.skin,
+        defaultBoardSlug: state.sharedSettings.defaultBoardSlug,
+        backgroundUrl: state.sharedSettings.backgroundUrl,
+        theme: state.sharedSettings.theme,
+        skin: state.sharedSettings.skin,
       });
       hydrateSettingsForm();
       applyVisualSettings();
@@ -528,15 +548,14 @@
       skin: data.skin || "",
     };
 
-    const local = loadLocalSettings();
     state.settings = normalizeSettings({
       ...state.settings,
-      siteTitle: local.siteTitle ? state.settings.siteTitle : state.sharedSettings.siteTitle,
+      siteTitle: state.sharedSettings.siteTitle,
       ownerUserId: state.sharedSettings.ownerUserId,
-      defaultBoardSlug: local.defaultBoardSlug ? state.settings.defaultBoardSlug : state.sharedSettings.defaultBoardSlug,
-      backgroundUrl: local.backgroundUrl ? state.settings.backgroundUrl : state.sharedSettings.backgroundUrl,
-      theme: local.theme ? state.settings.theme : state.sharedSettings.theme,
-      skin: local.skin ? state.settings.skin : state.sharedSettings.skin,
+      defaultBoardSlug: state.sharedSettings.defaultBoardSlug,
+      backgroundUrl: state.sharedSettings.backgroundUrl,
+      theme: state.sharedSettings.theme,
+      skin: state.sharedSettings.skin,
     });
     hydrateSettingsForm();
     applyVisualSettings();
@@ -608,13 +627,19 @@
       .channel("forest-cms")
       .on("postgres_changes", { event: "*", schema: "public", table: TABLES.boards }, async () => {
         await loadBoards();
+        selectInitialBoard();
         await loadPosts();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: TABLES.posts }, () => loadPosts())
-      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.comments }, () => loadPosts())
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.comments }, async () => {
+        await loadPosts();
+        if (state.selectedPost && els.postDialog.open) await loadComments(state.selectedPost.id);
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: TABLES.settings }, async () => {
         await loadSharedSettings();
+        updateIdentityUi();
         await loadBoards();
+        selectInitialBoard();
         await loadPosts();
       })
       .subscribe();
@@ -778,7 +803,7 @@
     els.writePolicyBadge.classList.toggle("connected", canWrite);
     els.writePostButton.disabled = !canWrite;
     els.editorBoardLabel.textContent = board.name;
-    els.storageMode.textContent = state.supabase ? "Supabase" : "로컬";
+    els.storageMode.textContent = useProxy() ? "프록시" : state.supabase ? "Supabase" : "로컬";
   }
 
   function renderPosts() {
@@ -903,9 +928,17 @@
     els.dialogContent.textContent = post.content;
     els.editPostButton.hidden = !canEditPost(post);
     els.deletePostButton.hidden = !canEditPost(post);
-    await incrementView(post);
-    await loadComments(post.id);
     els.postDialog.showModal();
+    try {
+      await incrementView(post);
+    } catch (error) {
+      setNotice(`조회수 갱신 실패: ${readableError(error)}`);
+    }
+    try {
+      await loadComments(post.id);
+    } catch (error) {
+      setNotice(`댓글 불러오기 실패: ${readableError(error)}`);
+    }
   }
 
   async function incrementView(post) {
@@ -1155,7 +1188,7 @@
   function fillBoardForm(board) {
     state.editingBoardId = board?.id || null;
     els.boardSlug.value = board?.slug || "";
-    els.boardSlug.disabled = Boolean(board && state.supabase);
+    els.boardSlug.disabled = Boolean(board && (state.supabase || useProxy()));
     els.boardName.value = board?.name || "";
     els.boardDescription.value = board?.description || "";
     els.boardType.value = board?.board_type || "board";
@@ -1266,6 +1299,7 @@
 
   function updateIdentityUi() {
     const owner = isOwner();
+    els.installLink.hidden = Boolean(state.settings.supabaseUrl || state.settings.apiBaseUrl);
     els.roleBadge.textContent = owner ? "관리자" : "손님";
     els.roleBadge.classList.toggle("role-owner", owner);
     els.roleBadge.classList.toggle("role-guest", !owner);
@@ -1451,9 +1485,16 @@
   }
 
   function loadSettings() {
+    const local = loadLocalSettings();
     return normalizeSettings({
       ...runtimeConfig,
-      ...loadLocalSettings(),
+      ...local,
+      apiBaseUrl: runtimeConfig.apiBaseUrl || local.apiBaseUrl,
+      oauthRedirectUrl: runtimeConfig.oauthRedirectUrl || local.oauthRedirectUrl,
+      supabaseUrl: runtimeConfig.supabaseUrl || local.supabaseUrl,
+      supabaseKey: runtimeConfig.supabaseKey || local.supabaseKey,
+      ownerUserId: runtimeConfig.ownerUserId || local.ownerUserId,
+      oauthProviders: rawRuntimeConfig.oauthProviders || local.oauthProviders || runtimeConfig.oauthProviders,
     });
   }
 
@@ -1602,6 +1643,9 @@
       const currentId = state.user?.id || "확인 안 됨";
       const ownerId = state.settings.ownerUserId || state.sharedSettings.ownerUserId || "DB에 없음";
       return `RLS가 막았어. 지금 로그인 ID는 ${currentId}, DB 관리자 ID는 ${ownerId}야. 둘이 다르면 Supabase SQL Editor에서 forest_site_settings.owner_user_id를 지금 로그인 ID로 바꿔줘.`;
+    }
+    if (message.toLowerCase().includes("authorization header") || message.includes("인증 헤더")) {
+      return "Edge Function JWT 검사가 켜져 있어. forest-proxy를 --no-verify-jwt 옵션으로 다시 배포해줘.";
     }
     return message;
   }

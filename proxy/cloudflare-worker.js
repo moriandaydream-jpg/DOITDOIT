@@ -7,7 +7,7 @@ const TABLES = {
 
 export default {
   async fetch(request, env) {
-    const origin = env.CORS_ORIGIN || "*";
+    const origin = resolveCorsOrigin(request, env.CORS_ORIGIN || "*");
     if (request.method === "OPTIONS") return cors(null, origin, 204);
 
     try {
@@ -16,16 +16,16 @@ export default {
       const path = url.pathname.replace(/\/+$/, "") || "/";
       const admin = isAdmin(request, env);
       const clientKey = getClientKey(request);
+      const siteSettings = await getSettings(env);
 
       if (path === "/api/settings" && request.method === "GET") {
-        const settings = await getSettings(env);
-        return cors({ settings }, origin);
+        return cors({ settings: siteSettings }, origin);
       }
 
       if (path === "/api/settings" && request.method === "PUT") {
         requireAdmin(admin);
         const body = await request.json();
-        const settings = await rest(env, TABLES.settings, {
+        const savedSettings = await rest(env, TABLES.settings, {
           method: "POST",
           search: "on_conflict=id",
           body: {
@@ -40,7 +40,7 @@ export default {
           },
           prefer: "resolution=merge-duplicates,return=representation",
         });
-        return cors({ settings: settings[0] || null }, origin);
+        return cors({ settings: savedSettings[0] || null }, origin);
       }
 
       if (path === "/api/boards" && request.method === "GET") {
@@ -50,13 +50,20 @@ export default {
 
       if (path === "/api/boards" && request.method === "POST") {
         requireAdmin(admin);
-        const body = await request.json();
-        const board = await rest(env, TABLES.boards, {
-          method: "POST",
-          search: "on_conflict=slug",
-          body: sanitizeBoard(body),
-          prefer: "resolution=merge-duplicates,return=representation",
-        });
+        const boardBody = sanitizeBoard(await request.json());
+        const board = boardBody.id
+          ? await rest(env, TABLES.boards, {
+              method: "PATCH",
+              search: `id=eq.${encodeURIComponent(boardBody.id)}`,
+              body: boardBody,
+              prefer: "return=representation",
+            })
+          : await rest(env, TABLES.boards, {
+              method: "POST",
+              search: "on_conflict=slug",
+              body: boardBody,
+              prefer: "resolution=merge-duplicates,return=representation",
+            });
         return cors({ board: board[0] || null }, origin);
       }
 
@@ -75,7 +82,7 @@ export default {
 
         const rows = await rest(env, TABLES.posts, {
           method: "POST",
-          body: sanitizePost(body, clientKey, admin),
+          body: sanitizePost(body, clientKey, admin, siteSettings?.owner_user_id),
           prefer: "return=representation",
         });
         return cors({ post: scrubPost(rows[0], clientKey, admin) }, origin, 201);
@@ -129,7 +136,7 @@ export default {
         if (!board?.allow_comments) return cors({ error: "댓글이 닫혀 있어." }, origin, 403);
         const rows = await rest(env, TABLES.comments, {
           method: "POST",
-          body: sanitizeComment(body, clientKey),
+          body: sanitizeComment(body, clientKey, admin, siteSettings?.owner_user_id),
           prefer: "return=representation",
         });
         return cors({ comment: scrubComment(rows[0], clientKey, admin) }, origin, 201);
@@ -244,6 +251,7 @@ async function commentCounts(env, postIds) {
 }
 
 function sanitizeBoard(body) {
+  const sortOrder = Number(body.sort_order);
   return {
     ...(body.id ? { id: body.id } : {}),
     slug: String(body.slug || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 32),
@@ -253,16 +261,17 @@ function sanitizeBoard(body) {
     write_role: body.write_role === "owner" ? "owner" : "all",
     allow_comments: body.allow_comments !== false,
     skin: body.skin === "blog" ? "blog" : "table",
-    sort_order: Number(body.sort_order || 100),
+    sort_order: Number.isFinite(sortOrder) ? Math.trunc(sortOrder) : 100,
     updated_at: new Date().toISOString(),
   };
 }
 
-function sanitizePost(body, clientKey, admin) {
+function sanitizePost(body, clientKey, admin, ownerUserId) {
+  const authorUserId = admin ? ownerUserId || null : null;
   return {
     board_id: body.board_id,
-    user_id: null,
-    client_key: clientKey,
+    user_id: authorUserId,
+    client_key: authorUserId ? "" : clientKey,
     title: String(body.title || "").trim().slice(0, 100),
     content: String(body.content || "").trim().slice(0, 8000),
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
@@ -282,11 +291,12 @@ function sanitizePostUpdate(body, admin) {
   };
 }
 
-function sanitizeComment(body, clientKey) {
+function sanitizeComment(body, clientKey, admin, ownerUserId) {
+  const authorUserId = admin ? ownerUserId || null : null;
   return {
     post_id: body.post_id,
-    user_id: null,
-    client_key: clientKey,
+    user_id: authorUserId,
+    client_key: authorUserId ? "" : clientKey,
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
     content: String(body.content || "").trim().slice(0, 1200),
   };
@@ -340,13 +350,30 @@ async function rpc(env, name, body) {
 
 async function readSupabaseResponse(response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
   if (!response.ok) {
-    const error = new Error(data?.message || data?.error || response.statusText);
+    const error = new Error(data?.message || data?.error || text || response.statusText);
     error.status = response.status;
     throw error;
   }
   return Array.isArray(data) ? data : data ? [data] : [];
+}
+
+function resolveCorsOrigin(request, configuredOrigin) {
+  if (!configuredOrigin || configuredOrigin === "*") return "*";
+  const requestOrigin = request.headers.get("origin") || "";
+  const allowedOrigins = configuredOrigin
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0] || "*";
 }
 
 function cors(data, origin, status = 200) {
@@ -357,6 +384,7 @@ function cors(data, origin, status = 200) {
       "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       "access-control-allow-headers": "content-type,authorization,x-forest-client-id",
       "content-type": "application/json; charset=utf-8",
+      vary: "Origin",
     },
   });
 }

@@ -6,7 +6,7 @@ const TABLES = {
 };
 
 Deno.serve(async (request) => {
-  const origin = Deno.env.get("CORS_ORIGIN") || "*";
+  const origin = resolveCorsOrigin(request, Deno.env.get("CORS_ORIGIN") || "*");
   if (request.method === "OPTIONS") return cors(null, origin, 204);
 
   try {
@@ -22,6 +22,7 @@ Deno.serve(async (request) => {
       admin,
       owner,
       userId: authUser?.id || "",
+      ownerUserId: settings?.owner_user_id || "",
       clientKey,
     };
 
@@ -59,12 +60,20 @@ Deno.serve(async (request) => {
 
     if (path === "/api/boards" && request.method === "POST") {
       requireOwner(actor);
-      const board = await rest(env, TABLES.boards, {
-        method: "POST",
-        search: "on_conflict=slug",
-        body: sanitizeBoard(await request.json()),
-        prefer: "resolution=merge-duplicates,return=representation",
-      });
+      const boardBody = sanitizeBoard(await request.json());
+      const board = boardBody.id
+        ? await rest(env, TABLES.boards, {
+            method: "PATCH",
+            search: `id=eq.${encodeURIComponent(boardBody.id)}`,
+            body: boardBody,
+            prefer: "return=representation",
+          })
+        : await rest(env, TABLES.boards, {
+            method: "POST",
+            search: "on_conflict=slug",
+            body: boardBody,
+            prefer: "resolution=merge-duplicates,return=representation",
+          });
       return cors({ board: board[0] || null }, origin);
     }
 
@@ -202,8 +211,12 @@ async function getAuthUser(request, env) {
     },
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (response.status === 401 || response.status === 403) return null;
+  const data = text ? parseJson(text) : null;
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error("로그인이 만료됐거나 유효하지 않아. 다시 로그인해줘.");
+    error.status = 401;
+    throw error;
+  }
   if (!response.ok) {
     const error = new Error(data?.message || data?.error || response.statusText);
     error.status = response.status;
@@ -217,7 +230,10 @@ function isOwnerUser(authUser, settings) {
 }
 
 function canManageSettings(settings, authUser, admin) {
-  return Boolean(admin || (authUser?.id && (!settings?.owner_user_id || settings.owner_user_id === authUser.id)));
+  if (admin) return true;
+  if (!authUser?.id) return false;
+  if (settings?.owner_user_id) return settings.owner_user_id === authUser.id;
+  return authUser.is_anonymous !== true;
 }
 
 function requireOwner(actor) {
@@ -307,6 +323,7 @@ async function commentCounts(env, postIds) {
 }
 
 function sanitizeBoard(body) {
+  const sortOrder = Number(body.sort_order);
   return {
     ...(body.id ? { id: body.id } : {}),
     slug: String(body.slug || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 32),
@@ -316,16 +333,17 @@ function sanitizeBoard(body) {
     write_role: body.write_role === "owner" ? "owner" : "all",
     allow_comments: body.allow_comments !== false,
     skin: body.skin === "blog" ? "blog" : "table",
-    sort_order: Number(body.sort_order || 100),
+    sort_order: Number.isFinite(sortOrder) ? Math.trunc(sortOrder) : 100,
     updated_at: new Date().toISOString(),
   };
 }
 
 function sanitizePost(body, actor) {
+  const authorUserId = actor.userId || (actor.admin ? actor.ownerUserId : "");
   return {
     board_id: body.board_id,
-    user_id: actor.userId || null,
-    client_key: actor.userId ? "" : actor.clientKey,
+    user_id: authorUserId || null,
+    client_key: authorUserId ? "" : actor.clientKey,
     title: String(body.title || "").trim().slice(0, 100),
     content: String(body.content || "").trim().slice(0, 8000),
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
@@ -346,10 +364,11 @@ function sanitizePostUpdate(body, actor) {
 }
 
 function sanitizeComment(body, actor) {
+  const authorUserId = actor.userId || (actor.admin ? actor.ownerUserId : "");
   return {
     post_id: body.post_id,
-    user_id: actor.userId || null,
-    client_key: actor.userId ? "" : actor.clientKey,
+    user_id: authorUserId || null,
+    client_key: authorUserId ? "" : actor.clientKey,
     author_name: String(body.author_name || "익명").trim().slice(0, 24),
     content: String(body.content || "").trim().slice(0, 1200),
   };
@@ -397,13 +416,23 @@ async function rpc(env, name, body) {
 
 async function readSupabaseResponse(response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = text ? parseJson(text) : null;
   if (!response.ok) {
-    const error = new Error(data?.message || data?.error || response.statusText);
+    const error = new Error(data?.message || data?.error || text || response.statusText);
     error.status = response.status;
     throw error;
   }
   return Array.isArray(data) ? data : data ? [data] : [];
+}
+
+function resolveCorsOrigin(request, configuredOrigin) {
+  if (!configuredOrigin || configuredOrigin === "*") return "*";
+  const requestOrigin = request.headers.get("origin") || "";
+  const allowedOrigins = configuredOrigin
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0] || "*";
 }
 
 function cors(data, origin, status = 200) {
@@ -414,6 +443,7 @@ function cors(data, origin, status = 200) {
       "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       "access-control-allow-headers": "content-type,authorization,x-forest-client-id",
       "content-type": "application/json; charset=utf-8",
+      vary: "Origin",
     },
   });
 }
