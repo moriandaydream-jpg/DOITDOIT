@@ -1361,7 +1361,9 @@
       return "Supabase Auth에서 Anonymous sign-ins를 켜야 해.";
     }
     if (message.includes("row-level security")) {
-      return "RLS 정책이 막았어. 관리자 User ID나 게시판 쓰기 권한을 확인해줘.";
+      const currentId = state.user?.id || "확인 안 됨";
+      const ownerId = state.settings.ownerUserId || state.sharedSettings.ownerUserId || "DB에 없음";
+      return `RLS가 막았어. 지금 로그인 ID는 ${currentId}, DB 관리자 ID는 ${ownerId}야. 둘이 다르면 Supabase SQL Editor에서 forest_site_settings.owner_user_id를 지금 로그인 ID로 바꿔줘.`;
     }
     return message;
   }
